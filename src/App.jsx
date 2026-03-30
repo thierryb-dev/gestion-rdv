@@ -37,7 +37,6 @@ function App() {
 
   function handleChange(e) {
     const { name, value } = e.target;
-
     const numericFields = ["duration", "travelBefore", "travelAfter"];
 
     setForm((prev) => ({
@@ -128,18 +127,10 @@ function App() {
   function changeDate(step) {
     const newDate = new Date(currentDate);
 
-    if (viewMode === "jour") {
-      newDate.setDate(newDate.getDate() + step);
-    }
-    if (viewMode === "semaine") {
-      newDate.setDate(newDate.getDate() + step * 7);
-    }
-    if (viewMode === "mois") {
-      newDate.setMonth(newDate.getMonth() + step);
-    }
-    if (viewMode === "annee") {
-      newDate.setFullYear(newDate.getFullYear() + step);
-    }
+    if (viewMode === "jour") newDate.setDate(newDate.getDate() + step);
+    if (viewMode === "semaine") newDate.setDate(newDate.getDate() + step * 7);
+    if (viewMode === "mois") newDate.setMonth(newDate.getMonth() + step);
+    if (viewMode === "annee") newDate.setFullYear(newDate.getFullYear() + step);
 
     setCurrentDate(newDate);
   }
@@ -162,7 +153,6 @@ function App() {
       const start = getStartOfWeek(currentDate);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
-
       return `Semaine du ${start.toLocaleDateString("fr-FR")} au ${end.toLocaleDateString("fr-FR")}`;
     }
 
@@ -273,505 +263,653 @@ function App() {
   const stats = useMemo(() => {
     return {
       count: filteredRdvs.length,
-      duration: filteredRdvs.reduce(
-        (sum, r) => sum + Number(r.duration || 0),
-        0
-      ),
+      duration: filteredRdvs.reduce((sum, r) => sum + Number(r.duration || 0), 0),
       travel: filteredRdvs.reduce(
-        (sum, r) =>
-          sum + Number(r.travelBefore || 0) + Number(r.travelAfter || 0),
+        (sum, r) => sum + Number(r.travelBefore || 0) + Number(r.travelAfter || 0),
         0
       ),
       conflicts: filteredRdvs.filter((r) => hasConflict(r)).length,
     };
   }, [filteredRdvs]);
 
+  const statusColors = {
+    prévu: {
+      background: "#fff7ed",
+      color: "#c2410c",
+      border: "1px solid #fdba74",
+    },
+    confirmé: {
+      background: "#ecfdf5",
+      color: "#047857",
+      border: "1px solid #6ee7b7",
+    },
+    terminé: {
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      border: "1px solid #93c5fd",
+    },
+    annulé: {
+      background: "#fef2f2",
+      color: "#b91c1c",
+      border: "1px solid #fca5a5",
+    },
+  };
+
   const styles = {
     page: {
-      maxWidth: 1200,
-      margin: "0 auto",
-      padding: 20,
-      fontFamily: "Arial, sans-serif",
-      background: "#f4f7fb",
       minHeight: "100vh",
-      color: "#1f2937",
+      background:
+        "linear-gradient(180deg, #eef2ff 0%, #f8fafc 35%, #f8fafc 100%)",
+      padding: 20,
+      fontFamily:
+        'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      color: "#0f172a",
+    },
+    wrapper: {
+      maxWidth: 1240,
+      margin: "0 auto",
+    },
+    hero: {
+      background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
+      borderRadius: 24,
+      padding: 24,
+      color: "white",
+      boxShadow: "0 18px 45px rgba(37, 99, 235, 0.25)",
+      marginBottom: 18,
+    },
+    heroTitle: {
+      margin: 0,
+      fontSize: 32,
+      fontWeight: 800,
+    },
+    heroText: {
+      marginTop: 8,
+      marginBottom: 0,
+      color: "rgba(255,255,255,0.92)",
+      lineHeight: 1.5,
     },
     card: {
-      background: "#fff",
-      borderRadius: 14,
-      padding: 18,
-      marginBottom: 16,
-      boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+      background: "rgba(255,255,255,0.92)",
+      backdropFilter: "blur(10px)",
+      borderRadius: 22,
+      padding: 20,
+      boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+      border: "1px solid rgba(255,255,255,0.7)",
+      marginBottom: 18,
     },
-    title: {
+    sectionTitle: {
       margin: 0,
-      marginBottom: 8,
+      marginBottom: 6,
+      fontSize: 22,
+      fontWeight: 800,
+      color: "#0f172a",
     },
-    subtitle: {
+    sectionText: {
       marginTop: 0,
-      color: "#6b7280",
+      marginBottom: 16,
+      color: "#64748b",
       fontSize: 14,
     },
     grid: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
-      gap: 12,
+      gap: 14,
     },
     input: {
       width: "100%",
-      padding: 10,
-      borderRadius: 8,
-      border: "1px solid #cbd5e1",
-      marginTop: 6,
+      padding: "12px 14px",
+      borderRadius: 14,
+      border: "1px solid #dbeafe",
+      background: "#ffffff",
+      marginTop: 8,
       fontSize: 14,
+      outline: "none",
       boxSizing: "border-box",
+      boxShadow: "inset 0 1px 2px rgba(15,23,42,0.03)",
     },
     textarea: {
       width: "100%",
-      minHeight: 90,
-      padding: 10,
-      borderRadius: 8,
-      border: "1px solid #cbd5e1",
-      marginTop: 6,
+      minHeight: 100,
+      padding: "12px 14px",
+      borderRadius: 14,
+      border: "1px solid #dbeafe",
+      background: "#ffffff",
+      marginTop: 8,
       fontSize: 14,
+      outline: "none",
       boxSizing: "border-box",
       resize: "vertical",
+      boxShadow: "inset 0 1px 2px rgba(15,23,42,0.03)",
     },
-    primaryBtn: {
-      padding: "10px 14px",
-      borderRadius: 8,
+    label: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: "#334155",
+    },
+    buttonPrimary: {
+      padding: "12px 16px",
+      borderRadius: 14,
       border: "none",
-      background: "#2563eb",
+      background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
       color: "white",
-      fontWeight: 700,
+      fontWeight: 800,
       cursor: "pointer",
-      marginRight: 8,
-      marginBottom: 8,
+      marginRight: 10,
+      marginBottom: 10,
+      boxShadow: "0 8px 18px rgba(37,99,235,0.25)",
     },
-    secondaryBtn: {
-      padding: "10px 14px",
-      borderRadius: 8,
+    buttonSecondary: {
+      padding: "12px 16px",
+      borderRadius: 14,
       border: "1px solid #cbd5e1",
-      background: "white",
-      color: "#111827",
+      background: "#ffffff",
+      color: "#0f172a",
       fontWeight: 700,
       cursor: "pointer",
-      marginRight: 8,
-      marginBottom: 8,
+      marginRight: 10,
+      marginBottom: 10,
     },
     badge: {
       display: "inline-block",
-      padding: "4px 10px",
+      padding: "6px 12px",
       borderRadius: 999,
-      background: "#e0e7ff",
-      color: "#3730a3",
+      background: "#eef2ff",
+      color: "#4338ca",
       fontSize: 12,
-      fontWeight: 700,
+      fontWeight: 800,
       marginBottom: 8,
     },
     statsGrid: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-      gap: 12,
+      gap: 14,
     },
     statBox: {
-      background: "#f8fafc",
-      borderRadius: 10,
-      padding: 12,
-      border: "1px solid #e5e7eb",
+      borderRadius: 18,
+      padding: 16,
+      background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+      border: "1px solid #e2e8f0",
+      boxShadow: "0 8px 22px rgba(15, 23, 42, 0.04)",
+    },
+    statValue: {
+      fontSize: 28,
+      fontWeight: 800,
+      marginTop: 6,
+      color: "#0f172a",
+    },
+    topNav: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 10,
+      alignItems: "center",
+      marginBottom: 14,
+    },
+    filterRow: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gap: 14,
+      alignItems: "end",
+      marginBottom: 16,
     },
     rdvCard: {
-      border: "1px solid #e5e7eb",
-      borderRadius: 12,
-      padding: 14,
-      background: "#fafafa",
+      borderRadius: 20,
+      padding: 18,
+      background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+      border: "1px solid #e2e8f0",
+      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)",
+      marginBottom: 14,
+    },
+    rdvHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      gap: 12,
+      alignItems: "flex-start",
+      flexWrap: "wrap",
+    },
+    rdvTitle: {
+      marginTop: 0,
+      marginBottom: 8,
+      fontSize: 18,
+      fontWeight: 800,
+    },
+    metaGrid: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+      gap: 10,
+      marginTop: 12,
       marginBottom: 12,
+    },
+    metaBox: {
+      background: "#ffffff",
+      border: "1px solid #e2e8f0",
+      borderRadius: 14,
+      padding: 12,
+      fontSize: 14,
+    },
+    subtle: {
+      color: "#64748b",
+      fontSize: 14,
     },
     conflict: {
       color: "#b91c1c",
-      fontWeight: 700,
+      fontWeight: 800,
+      margin: "8px 0",
     },
   };
 
   return (
     <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Gestion des rendez-vous</h1>
-        <p style={styles.subtitle}>
-          Planning responsive PC / mobile avec QQOQCP, temps de trajet,
-          conflits, filtres et vues temporelles.
-        </p>
-      </div>
-
-      <div style={styles.card}>
-        <h2 style={styles.title}>
-          {editingId ? "Modifier un rendez-vous" : "Créer un rendez-vous"}
-        </h2>
-
-        <div style={styles.grid}>
-          <div>
-            <label>Quoi *</label>
-            <input
-              style={styles.input}
-              name="what"
-              value={form.what}
-              onChange={handleChange}
-              placeholder="Ex : Visite client"
-            />
-          </div>
-
-          <div>
-            <label>Qui</label>
-            <input
-              style={styles.input}
-              name="who"
-              value={form.who}
-              onChange={handleChange}
-              placeholder="Nom du contact"
-            />
-          </div>
-
-          <div>
-            <label>Où</label>
-            <input
-              style={styles.input}
-              name="where"
-              value={form.where}
-              onChange={handleChange}
-              placeholder="Adresse ou lieu"
-            />
-          </div>
-
-          <div>
-            <label>Comment</label>
-            <input
-              style={styles.input}
-              name="how"
-              value={form.how}
-              onChange={handleChange}
-              placeholder="Présentiel, visio, téléphone"
-            />
-          </div>
-
-          <div>
-            <label>Pourquoi</label>
-            <input
-              style={styles.input}
-              name="why"
-              value={form.why}
-              onChange={handleChange}
-              placeholder="Objectif du rendez-vous"
-            />
-          </div>
-
-          <div>
-            <label>Date *</label>
-            <input
-              style={styles.input}
-              type="date"
-              name="whenDate"
-              value={form.whenDate}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label>Heure *</label>
-            <input
-              style={styles.input}
-              type="time"
-              name="whenStart"
-              value={form.whenStart}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label>Durée RDV (min)</label>
-            <input
-              style={styles.input}
-              type="number"
-              name="duration"
-              value={form.duration}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label>Temps trajet avant (min)</label>
-            <input
-              style={styles.input}
-              type="number"
-              name="travelBefore"
-              value={form.travelBefore}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label>Temps trajet après (min)</label>
-            <input
-              style={styles.input}
-              type="number"
-              name="travelAfter"
-              value={form.travelAfter}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label>Statut</label>
-            <select
-              style={styles.input}
-              name="status"
-              value={form.status}
-              onChange={handleChange}
-            >
-              <option value="prévu">Prévu</option>
-              <option value="confirmé">Confirmé</option>
-              <option value="terminé">Terminé</option>
-              <option value="annulé">Annulé</option>
-            </select>
-          </div>
+      <div style={styles.wrapper}>
+        <div style={styles.hero}>
+          <h1 style={styles.heroTitle}>Gestion des rendez-vous</h1>
+          <p style={styles.heroText}>
+            Une interface moderne pour organiser tes rendez-vous, gérer les
+            trajets, visualiser les périodes et repérer rapidement les conflits.
+          </p>
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <label>Notes</label>
-          <textarea
-            style={styles.textarea}
-            name="notes"
-            value={form.notes}
-            onChange={handleChange}
-            placeholder="Informations complémentaires"
-          />
-        </div>
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>
+            {editingId ? "Modifier un rendez-vous" : "Créer un rendez-vous"}
+          </h2>
+          <p style={styles.sectionText}>
+            Le titre est généré automatiquement à partir de la logique QQOQCP.
+          </p>
 
-        <div style={{ marginTop: 14 }}>
-          <div style={styles.badge}>Titre automatique QQOQCP</div>
-          <div>{generateTitle(form)}</div>
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          <button style={styles.primaryBtn} onClick={addOrUpdateRdv}>
-            {editingId ? "Enregistrer les modifications" : "Ajouter le rendez-vous"}
-          </button>
-          <button style={styles.secondaryBtn} onClick={resetForm}>
-            Réinitialiser
-          </button>
-        </div>
-      </div>
-
-      <div style={styles.card}>
-        <h2 style={styles.title}>Navigation</h2>
-
-        <div style={{ marginBottom: 12 }}>
-          <button style={styles.secondaryBtn} onClick={() => changeDate(-1)}>
-            ◀ Précédent
-          </button>
-          <button style={styles.secondaryBtn} onClick={() => changeDate(1)}>
-            Suivant ▶
-          </button>
-          <button style={styles.secondaryBtn} onClick={goToday}>
-            Aujourd’hui
-          </button>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <button
-            style={{
-              ...styles.secondaryBtn,
-              background: viewMode === "jour" ? "#2563eb" : "#fff",
-              color: viewMode === "jour" ? "#fff" : "#111",
-              border: viewMode === "jour" ? "none" : "1px solid #cbd5e1",
-            }}
-            onClick={() => setViewMode("jour")}
-          >
-            Jour
-          </button>
-
-          <button
-            style={{
-              ...styles.secondaryBtn,
-              background: viewMode === "semaine" ? "#2563eb" : "#fff",
-              color: viewMode === "semaine" ? "#fff" : "#111",
-              border: viewMode === "semaine" ? "none" : "1px solid #cbd5e1",
-            }}
-            onClick={() => setViewMode("semaine")}
-          >
-            Semaine
-          </button>
-
-          <button
-            style={{
-              ...styles.secondaryBtn,
-              background: viewMode === "mois" ? "#2563eb" : "#fff",
-              color: viewMode === "mois" ? "#fff" : "#111",
-              border: viewMode === "mois" ? "none" : "1px solid #cbd5e1",
-            }}
-            onClick={() => setViewMode("mois")}
-          >
-            Mois
-          </button>
-
-          <button
-            style={{
-              ...styles.secondaryBtn,
-              background: viewMode === "annee" ? "#2563eb" : "#fff",
-              color: viewMode === "annee" ? "#fff" : "#111",
-              border: viewMode === "annee" ? "none" : "1px solid #cbd5e1",
-            }}
-            onClick={() => setViewMode("annee")}
-          >
-            Année
-          </button>
-        </div>
-
-        <p>
-          <strong>Mode actif :</strong> {viewMode}
-        </p>
-        <p>
-          <strong>Période affichée :</strong> {getPeriodLabel()}
-        </p>
-      </div>
-
-      <div style={styles.card}>
-        <h2 style={styles.title}>Filtres et résumé</h2>
-
-        <div style={{ ...styles.grid, marginBottom: 16 }}>
-          <div>
-            <label>Recherche</label>
-            <input
-              style={styles.input}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="client, lieu, objectif..."
-            />
-          </div>
-
-          <div>
-            <label>Filtre statut</label>
-            <select
-              style={styles.input}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="tous">Tous</option>
-              <option value="prévu">Prévu</option>
-              <option value="confirmé">Confirmé</option>
-              <option value="terminé">Terminé</option>
-              <option value="annulé">Annulé</option>
-            </select>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "end" }}>
-            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={styles.grid}>
+            <div>
+              <label style={styles.label}>Quoi *</label>
               <input
-                type="checkbox"
-                checked={showOnlyConflicts}
-                onChange={(e) => setShowOnlyConflicts(e.target.checked)}
+                style={styles.input}
+                name="what"
+                value={form.what}
+                onChange={handleChange}
+                placeholder="Ex : Visite client"
               />
-              Afficher seulement les conflits
-            </label>
-          </div>
-        </div>
-
-        <div style={styles.statsGrid}>
-          <div style={styles.statBox}>
-            <div style={styles.badge}>Rendez-vous</div>
-            <div>{stats.count}</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.badge}>Temps RDV</div>
-            <div>{stats.duration} min</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.badge}>Temps trajet</div>
-            <div>{stats.travel} min</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.badge}>Conflits</div>
-            <div>{stats.conflicts}</div>
-          </div>
-        </div>
-      </div>
-
-      <div style={styles.card}>
-        <h2 style={styles.title}>Liste des rendez-vous</h2>
-
-        {filteredRdvs.length === 0 ? (
-          <p>Aucun rendez-vous sur cette période.</p>
-        ) : (
-          filteredRdvs.map((r) => (
-            <div key={r.id} style={styles.rdvCard}>
-              <div style={styles.badge}>{r.whenDate}</div>
-              <h3 style={{ marginTop: 0 }}>{generateTitle(r)}</h3>
-
-              {hasConflict(r) && (
-                <p style={styles.conflict}>Conflit de planning</p>
-              )}
-
-              <p>
-                <strong>Heure :</strong> {r.whenStart}
-              </p>
-              <p>
-                <strong>Durée :</strong> {r.duration} min
-              </p>
-              <p>
-                <strong>Statut :</strong> {r.status}
-              </p>
-              <p>
-                <strong>Temps trajet :</strong> avant {r.travelBefore} min / après{" "}
-                {r.travelAfter} min
-              </p>
-
-              {r.who && (
-                <p>
-                  <strong>Qui :</strong> {r.who}
-                </p>
-              )}
-
-              {r.where && (
-                <p>
-                  <strong>Lieu :</strong> {r.where}
-                </p>
-              )}
-
-              {r.how && (
-                <p>
-                  <strong>Comment :</strong> {r.how}
-                </p>
-              )}
-
-              {r.why && (
-                <p>
-                  <strong>Pourquoi :</strong> {r.why}
-                </p>
-              )}
-
-              {r.notes && (
-                <p>
-                  <strong>Notes :</strong> {r.notes}
-                </p>
-              )}
-
-              <div style={{ marginTop: 12 }}>
-                <button style={styles.secondaryBtn} onClick={() => editRdv(r)}>
-                  Modifier
-                </button>
-                <button
-                  style={{
-                    ...styles.secondaryBtn,
-                    borderColor: "#ef4444",
-                    color: "#b91c1c",
-                  }}
-                  onClick={() => deleteRdv(r.id)}
-                >
-                  Supprimer
-                </button>
-              </div>
             </div>
-          ))
-        )}
+
+            <div>
+              <label style={styles.label}>Qui</label>
+              <input
+                style={styles.input}
+                name="who"
+                value={form.who}
+                onChange={handleChange}
+                placeholder="Nom du contact"
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Où</label>
+              <input
+                style={styles.input}
+                name="where"
+                value={form.where}
+                onChange={handleChange}
+                placeholder="Adresse ou lieu"
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Comment</label>
+              <input
+                style={styles.input}
+                name="how"
+                value={form.how}
+                onChange={handleChange}
+                placeholder="Présentiel, visio, téléphone"
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Pourquoi</label>
+              <input
+                style={styles.input}
+                name="why"
+                value={form.why}
+                onChange={handleChange}
+                placeholder="Objectif"
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Date *</label>
+              <input
+                style={styles.input}
+                type="date"
+                name="whenDate"
+                value={form.whenDate}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Heure *</label>
+              <input
+                style={styles.input}
+                type="time"
+                name="whenStart"
+                value={form.whenStart}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Durée RDV (min)</label>
+              <input
+                style={styles.input}
+                type="number"
+                name="duration"
+                value={form.duration}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Temps trajet avant (min)</label>
+              <input
+                style={styles.input}
+                type="number"
+                name="travelBefore"
+                value={form.travelBefore}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Temps trajet après (min)</label>
+              <input
+                style={styles.input}
+                type="number"
+                name="travelAfter"
+                value={form.travelAfter}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Statut</label>
+              <select
+                style={styles.input}
+                name="status"
+                value={form.status}
+                onChange={handleChange}
+              >
+                <option value="prévu">Prévu</option>
+                <option value="confirmé">Confirmé</option>
+                <option value="terminé">Terminé</option>
+                <option value="annulé">Annulé</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <label style={styles.label}>Notes</label>
+            <textarea
+              style={styles.textarea}
+              name="notes"
+              value={form.notes}
+              onChange={handleChange}
+              placeholder="Informations complémentaires"
+            />
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div style={styles.badge}>Titre automatique</div>
+            <div style={{ fontWeight: 700 }}>{generateTitle(form)}</div>
+          </div>
+
+          <div style={{ marginTop: 18 }}>
+            <button style={styles.buttonPrimary} onClick={addOrUpdateRdv}>
+              {editingId ? "Enregistrer les modifications" : "Ajouter le rendez-vous"}
+            </button>
+            <button style={styles.buttonSecondary} onClick={resetForm}>
+              Réinitialiser
+            </button>
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>Navigation</h2>
+          <p style={styles.sectionText}>
+            Navigue par jour, semaine, mois ou année.
+          </p>
+
+          <div style={styles.topNav}>
+            <button style={styles.buttonSecondary} onClick={() => changeDate(-1)}>
+              ◀ Précédent
+            </button>
+            <button style={styles.buttonSecondary} onClick={() => changeDate(1)}>
+              Suivant ▶
+            </button>
+            <button style={styles.buttonSecondary} onClick={goToday}>
+              Aujourd’hui
+            </button>
+          </div>
+
+          <div style={styles.topNav}>
+            {["jour", "semaine", "mois", "annee"].map((mode) => (
+              <button
+                key={mode}
+                style={{
+                  ...styles.buttonSecondary,
+                  background:
+                    viewMode === mode
+                      ? "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)"
+                      : "#ffffff",
+                  color: viewMode === mode ? "#ffffff" : "#0f172a",
+                  border: viewMode === mode ? "none" : "1px solid #cbd5e1",
+                  boxShadow:
+                    viewMode === mode
+                      ? "0 8px 18px rgba(37,99,235,0.2)"
+                      : "none",
+                }}
+                onClick={() => setViewMode(mode)}
+              >
+                {mode === "jour"
+                  ? "Jour"
+                  : mode === "semaine"
+                    ? "Semaine"
+                    : mode === "mois"
+                      ? "Mois"
+                      : "Année"}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <p style={{ margin: "6px 0" }}>
+              <strong>Mode actif :</strong> {viewMode}
+            </p>
+            <p style={{ margin: "6px 0" }}>
+              <strong>Période affichée :</strong> {getPeriodLabel()}
+            </p>
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>Filtres et résumé</h2>
+          <p style={styles.sectionText}>
+            Recherche rapide, filtre par statut et conflits.
+          </p>
+
+          <div style={styles.filterRow}>
+            <div>
+              <label style={styles.label}>Recherche</label>
+              <input
+                style={styles.input}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="client, lieu, objectif..."
+              />
+            </div>
+
+            <div>
+              <label style={styles.label}>Filtre statut</label>
+              <select
+                style={styles.input}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="tous">Tous</option>
+                <option value="prévu">Prévu</option>
+                <option value="confirmé">Confirmé</option>
+                <option value="terminé">Terminé</option>
+                <option value="annulé">Annulé</option>
+              </select>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyConflicts}
+                  onChange={(e) => setShowOnlyConflicts(e.target.checked)}
+                />
+                Afficher seulement les conflits
+              </label>
+            </div>
+          </div>
+
+          <div style={styles.statsGrid}>
+            <div style={styles.statBox}>
+              <div style={styles.badge}>Rendez-vous</div>
+              <div style={styles.statValue}>{stats.count}</div>
+            </div>
+
+            <div style={styles.statBox}>
+              <div style={styles.badge}>Temps RDV</div>
+              <div style={styles.statValue}>{stats.duration} min</div>
+            </div>
+
+            <div style={styles.statBox}>
+              <div style={styles.badge}>Temps trajet</div>
+              <div style={styles.statValue}>{stats.travel} min</div>
+            </div>
+
+            <div style={styles.statBox}>
+              <div style={styles.badge}>Conflits</div>
+              <div style={styles.statValue}>{stats.conflicts}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>Liste des rendez-vous</h2>
+          <p style={styles.sectionText}>
+            Vue chronologique avec statut, conflit et détails.
+          </p>
+
+          {filteredRdvs.length === 0 ? (
+            <p style={styles.subtle}>Aucun rendez-vous sur cette période.</p>
+          ) : (
+            filteredRdvs.map((r) => (
+              <div key={r.id} style={styles.rdvCard}>
+                <div style={styles.rdvHeader}>
+                  <div>
+                    <div style={styles.badge}>{r.whenDate}</div>
+                    <h3 style={styles.rdvTitle}>{generateTitle(r)}</h3>
+                  </div>
+
+                  <div
+                    style={{
+                      ...(statusColors[r.status] || statusColors["prévu"]),
+                      padding: "6px 12px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {r.status}
+                  </div>
+                </div>
+
+                {hasConflict(r) && (
+                  <p style={styles.conflict}>Conflit de planning détecté</p>
+                )}
+
+                <div style={styles.metaGrid}>
+                  <div style={styles.metaBox}>
+                    <strong>Heure</strong>
+                    <div>{r.whenStart}</div>
+                  </div>
+
+                  <div style={styles.metaBox}>
+                    <strong>Durée</strong>
+                    <div>{r.duration} min</div>
+                  </div>
+
+                  <div style={styles.metaBox}>
+                    <strong>Trajet</strong>
+                    <div>
+                      avant {r.travelBefore} min / après {r.travelAfter} min
+                    </div>
+                  </div>
+
+                  {r.who && (
+                    <div style={styles.metaBox}>
+                      <strong>Qui</strong>
+                      <div>{r.who}</div>
+                    </div>
+                  )}
+
+                  {r.where && (
+                    <div style={styles.metaBox}>
+                      <strong>Lieu</strong>
+                      <div>{r.where}</div>
+                    </div>
+                  )}
+
+                  {r.how && (
+                    <div style={styles.metaBox}>
+                      <strong>Comment</strong>
+                      <div>{r.how}</div>
+                    </div>
+                  )}
+
+                  {r.why && (
+                    <div style={styles.metaBox}>
+                      <strong>Pourquoi</strong>
+                      <div>{r.why}</div>
+                    </div>
+                  )}
+                </div>
+
+                {r.notes && (
+                  <div
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 14,
+                      padding: 12,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <strong>Notes</strong>
+                    <div style={{ marginTop: 6 }}>{r.notes}</div>
+                  </div>
+                )}
+
+                <div>
+                  <button style={styles.buttonSecondary} onClick={() => editRdv(r)}>
+                    Modifier
+                  </button>
+                  <button
+                    style={{
+                      ...styles.buttonSecondary,
+                      borderColor: "#fca5a5",
+                      color: "#b91c1c",
+                    }}
+                    onClick={() => deleteRdv(r.id)}
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
