@@ -1,23 +1,59 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const STORAGE_KEY = "agenda-avf-r2c-v2";
+const STORAGE_KEY = "agenda-avf-r2c-v3";
 
-const DEFAULT_CATEGORIES = ["AVF", "R2C", "Administratif", "Partenariat", "Terrain", "Autre"];
+const DEFAULT_CATEGORY_OPTIONS = {
+  AVF: ["Entretien", "Atelier", "Visite", "Réunion", "Accompagnement", "Autre"],
+  R2C: ["Marche nordique", "Course à pied", "Nordic tonic", "Réunion", "Autre"],
+  Administratif: ["Dossier", "Réunion", "Compte-rendu", "Appel", "Autre"],
+  Partenariat: ["Réunion", "Prospection", "Suivi", "Convention", "Autre"],
+  Terrain: ["Visite", "Intervention", "Animation", "Repérage", "Autre"],
+  Autre: ["Autre"],
+};
 
 const DEFAULT_ACTIVITIES = [
   {
-    id: "act-avf-1",
-    name: "Entretien AVF",
-    category: "AVF",
+    id: "act-r2c-marche",
+    name: "Marche nordique",
+    category: "R2C",
+    subcategory: "Marche nordique",
+    defaultDuration: 90,
+    notes: "",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "act-r2c-course",
+    name: "Course à pied",
+    category: "R2C",
+    subcategory: "Course à pied",
     defaultDuration: 60,
     notes: "",
     createdAt: new Date().toISOString(),
   },
   {
-    id: "act-r2c-1",
-    name: "Suivi R2C",
+    id: "act-r2c-nordic",
+    name: "Nordic tonic",
     category: "R2C",
+    subcategory: "Nordic tonic",
+    defaultDuration: 60,
+    notes: "",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "act-r2c-reunion",
+    name: "Réunion R2C",
+    category: "R2C",
+    subcategory: "Réunion",
     defaultDuration: 90,
+    notes: "",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "act-avf-entretien",
+    name: "Entretien AVF",
+    category: "AVF",
+    subcategory: "Entretien",
+    defaultDuration: 60,
     notes: "",
     createdAt: new Date().toISOString(),
   },
@@ -28,6 +64,7 @@ const INITIAL_EVENT_FORM = {
   title: "",
   activityId: "",
   category: "AVF",
+  subcategory: "Entretien",
   who: "",
   where: "",
   whenDate: "",
@@ -41,7 +78,7 @@ const INITIAL_EVENT_FORM = {
   travelAfter: 0,
   recurrence: {
     enabled: false,
-    frequency: "weekly", // daily | weekly | monthly
+    frequency: "weekly",
     interval: 1,
     count: 1,
     until: "",
@@ -49,10 +86,18 @@ const INITIAL_EVENT_FORM = {
 };
 
 const INITIAL_ACTIVITY_FORM = {
+  id: null,
   name: "",
   category: "AVF",
+  subcategory: "Entretien",
   defaultDuration: 60,
   notes: "",
+};
+
+const INITIAL_STATS_FILTER = {
+  mode: "current", // current | week | month | year | custom
+  customStart: "",
+  customEnd: "",
 };
 
 function App() {
@@ -63,50 +108,56 @@ function App() {
         return {
           events: [],
           activities: DEFAULT_ACTIVITIES,
-          categories: DEFAULT_CATEGORIES,
+          categoryOptions: DEFAULT_CATEGORY_OPTIONS,
         };
       }
 
       const parsed = JSON.parse(raw);
+
       return {
         events: Array.isArray(parsed.events) ? parsed.events : [],
         activities:
           Array.isArray(parsed.activities) && parsed.activities.length > 0
             ? parsed.activities
             : DEFAULT_ACTIVITIES,
-        categories:
-          Array.isArray(parsed.categories) && parsed.categories.length > 0
-            ? parsed.categories
-            : DEFAULT_CATEGORIES,
+        categoryOptions:
+          parsed.categoryOptions && typeof parsed.categoryOptions === "object"
+            ? parsed.categoryOptions
+            : DEFAULT_CATEGORY_OPTIONS,
       };
     } catch {
       return {
         events: [],
         activities: DEFAULT_ACTIVITIES,
-        categories: DEFAULT_CATEGORIES,
+        categoryOptions: DEFAULT_CATEGORY_OPTIONS,
       };
     }
   });
 
+  const [activeMenu, setActiveMenu] = useState("agenda"); // agenda | event | activities | stats
   const [eventForm, setEventForm] = useState(INITIAL_EVENT_FORM);
   const [activityForm, setActivityForm] = useState(INITIAL_ACTIVITY_FORM);
 
   const [editingEventId, setEditingEventId] = useState(null);
+  const [editingActivityId, setEditingActivityId] = useState(null);
 
-  const [viewMode, setViewMode] = useState("jour");
+  const [viewMode, setViewMode] = useState("semaine");
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("tous");
   const [categoryFilter, setCategoryFilter] = useState("toutes");
+  const [subcategoryFilter, setSubcategoryFilter] = useState("toutes");
   const [typeFilter, setTypeFilter] = useState("tous");
   const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
+
+  const [statsFilter, setStatsFilter] = useState(INITIAL_STATS_FILTER);
 
   const fileInputRef = useRef(null);
 
   const events = data.events;
   const activities = data.activities;
-  const categories = data.categories;
+  const categoryOptions = data.categoryOptions;
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -124,15 +175,48 @@ function App() {
     setData((prev) => ({ ...prev, activities: nextActivities }));
   }
 
-  function setCategories(nextCategories) {
-    setData((prev) => ({ ...prev, categories: nextCategories }));
+  function setCategoryOptions(nextCategoryOptions) {
+    setData((prev) => ({ ...prev, categoryOptions: nextCategoryOptions }));
+  }
+
+  function getCategories() {
+    return Object.keys(categoryOptions);
+  }
+
+  function getSubcategories(category) {
+    return categoryOptions[category] || ["Autre"];
   }
 
   function ensureCategoryExists(category) {
     const clean = String(category || "").trim();
     if (!clean) return;
-    if (!categories.includes(clean)) {
-      setCategories([...categories, clean]);
+
+    if (!categoryOptions[clean]) {
+      setCategoryOptions({
+        ...categoryOptions,
+        [clean]: ["Autre"],
+      });
+    }
+  }
+
+  function ensureSubcategoryExists(category, subcategory) {
+    const cat = String(category || "").trim();
+    const sub = String(subcategory || "").trim();
+    if (!cat || !sub) return;
+
+    if (!categoryOptions[cat]) {
+      setCategoryOptions({
+        ...categoryOptions,
+        [cat]: [sub],
+      });
+      return;
+    }
+
+    if (!categoryOptions[cat].includes(sub)) {
+      setCategoryOptions({
+        ...categoryOptions,
+        [cat]: [...categoryOptions[cat], sub],
+      });
     }
   }
 
@@ -143,6 +227,7 @@ function App() {
 
   function resetActivityForm() {
     setActivityForm(INITIAL_ACTIVITY_FORM);
+    setEditingActivityId(null);
   }
 
   function handleEventChange(e) {
@@ -168,6 +253,16 @@ function App() {
       return;
     }
 
+    if (name === "category") {
+      const nextSubs = getSubcategories(value);
+      setEventForm((prev) => ({
+        ...prev,
+        category: value,
+        subcategory: nextSubs[0] || "Autre",
+      }));
+      return;
+    }
+
     setEventForm((prev) => ({
       ...prev,
       [name]:
@@ -183,50 +278,45 @@ function App() {
 
   function handleActivityChange(e) {
     const { name, value } = e.target;
+
+    if (name === "category") {
+      const nextSubs = getSubcategories(value);
+      setActivityForm((prev) => ({
+        ...prev,
+        category: value,
+        subcategory: nextSubs[0] || "Autre",
+      }));
+      return;
+    }
+
     setActivityForm((prev) => ({
       ...prev,
       [name]: name === "defaultDuration" ? (value === "" ? "" : Number(value)) : value,
     }));
   }
 
-  function resolveEventTitle(formLike) {
-    if (formLike.type === "activite") {
-      if (formLike.activityId) {
-        const activity = activities.find((a) => a.id === formLike.activityId);
-        if (activity?.name) return activity.name;
-      }
-      return String(formLike.title || "").trim();
-    }
-
-    if (String(formLike.title || "").trim()) {
-      return String(formLike.title || "").trim();
-    }
-
-    const parts = [
-      formLike.what?.trim?.() || "",
-      formLike.who?.trim?.() ? `avec ${formLike.who.trim()}` : "",
-      formLike.where?.trim?.() ? `à ${formLike.where.trim()}` : "",
-      formLike.why?.trim?.() ? `pour ${formLike.why.trim()}` : "",
-      formLike.how?.trim?.() ? `via ${formLike.how.trim()}` : "",
-    ].filter(Boolean);
-
-    return parts.length ? parts.join(" · ") : "Événement sans titre";
-  }
-
   function getActivityById(id) {
     return activities.find((a) => a.id === id) || null;
   }
 
-  function getResolvedCategory(item) {
-    if (item.type === "activite" && item.activityId) {
-      const activity = getActivityById(item.activityId);
-      return item.category || activity?.category || "Autre";
+  function resolveEventCategory(evt) {
+    if (evt.type === "activite" && evt.activityId) {
+      const activity = getActivityById(evt.activityId);
+      return evt.category || activity?.category || "Autre";
     }
-    return item.category || "Autre";
+    return evt.category || "Autre";
+  }
+
+  function resolveEventSubcategory(evt) {
+    if (evt.type === "activite" && evt.activityId) {
+      const activity = getActivityById(evt.activityId);
+      return evt.subcategory || activity?.subcategory || "Autre";
+    }
+    return evt.subcategory || "Autre";
   }
 
   function validateEvent(payload) {
-    if (payload.type !== "rdv" && payload.type !== "activite") {
+    if (!["rdv", "activite"].includes(payload.type)) {
       return "Le type d'événement est invalide.";
     }
     if (!payload.whenDate) return "La date est obligatoire.";
@@ -253,6 +343,23 @@ function App() {
     return null;
   }
 
+  function validateActivity(payload) {
+    if (!payload.name?.trim()) return "Le nom de l'activité est obligatoire.";
+    if (!payload.category?.trim()) return "La catégorie est obligatoire.";
+    if (!payload.subcategory?.trim()) return "Le sous-type / sous-catégorie est obligatoire.";
+    if (Number(payload.defaultDuration || 0) <= 0) {
+      return "La durée par défaut doit être supérieure à 0.";
+    }
+    return null;
+  }
+
+  function formatDateInputValue(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   function combineDateTime(dateStr, timeStr) {
     return new Date(`${dateStr}T${timeStr}:00`);
   }
@@ -263,13 +370,6 @@ function App() {
     if (frequency === "weekly") d.setDate(d.getDate() + interval * 7);
     if (frequency === "monthly") d.setMonth(d.getMonth() + interval);
     return d;
-  }
-
-  function formatDateInputValue(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
   }
 
   function buildOccurrencesFromPayload(payload, baseId = null) {
@@ -316,6 +416,7 @@ function App() {
         title: payload.title,
         activityId: payload.activityId || "",
         category: payload.category,
+        subcategory: payload.subcategory,
         who: payload.who,
         where: payload.where,
         whenDate: formatDateInputValue(cursor),
@@ -336,13 +437,24 @@ function App() {
 
       if (!untilDate && index >= maxCount) break;
       if (untilDate && Number(payload.recurrence.count || 0) > 0 && index >= maxCount) break;
-
-      if (untilDate && Number(payload.recurrence.count || 0) <= 0) {
-        if (cursor > untilDate) break;
-      }
+      if (untilDate && Number(payload.recurrence.count || 0) <= 0 && cursor > untilDate) break;
     }
 
     return list;
+  }
+
+  function onActivitySelected(activityId) {
+    const activity = getActivityById(activityId);
+
+    setEventForm((prev) => ({
+      ...prev,
+      activityId,
+      title: activity?.name || "",
+      category: activity?.category || prev.category,
+      subcategory: activity?.subcategory || prev.subcategory,
+      duration: activity?.defaultDuration || prev.duration,
+      notes: prev.notes || activity?.notes || "",
+    }));
   }
 
   function addOrUpdateEvent() {
@@ -354,19 +466,12 @@ function App() {
       return (eventForm.title || "").trim();
     })();
 
-    const activityCategory = (() => {
-      if (eventForm.type === "activite" && eventForm.activityId) {
-        const activity = getActivityById(eventForm.activityId);
-        return String(eventForm.category || activity?.category || "Autre").trim();
-      }
-      return String(eventForm.category || "Autre").trim();
-    })();
-
     const payload = {
       type: String(eventForm.type || "rdv"),
       title: resolvedTitle,
       activityId: String(eventForm.activityId || ""),
-      category: activityCategory,
+      category: String(eventForm.category || "Autre").trim(),
+      subcategory: String(eventForm.subcategory || "Autre").trim(),
       who: String(eventForm.who || "").trim(),
       where: String(eventForm.where || "").trim(),
       whenDate: String(eventForm.whenDate || ""),
@@ -394,6 +499,7 @@ function App() {
     }
 
     ensureCategoryExists(payload.category);
+    ensureSubcategoryExists(payload.category, payload.subcategory);
 
     if (editingEventId) {
       setEvents(
@@ -416,22 +522,7 @@ function App() {
     }
 
     resetEventForm();
-  }
-
-  function deleteEvent(id) {
-    setEvents(events.filter((evt) => evt.id !== id));
-    if (editingEventId === id) resetEventForm();
-  }
-
-  function deleteRecurrenceGroup(groupId) {
-    if (!groupId) return;
-    setEvents(events.filter((evt) => evt.recurrenceGroupId !== groupId));
-    if (editingEventId) {
-      const current = events.find((evt) => evt.id === editingEventId);
-      if (current?.recurrenceGroupId === groupId) {
-        resetEventForm();
-      }
-    }
+    setActiveMenu("agenda");
   }
 
   function editEvent(evt) {
@@ -441,6 +532,7 @@ function App() {
       title: evt.title || "",
       activityId: evt.activityId || "",
       category: evt.category || "Autre",
+      subcategory: evt.subcategory || "Autre",
       who: evt.who || "",
       where: evt.where || "",
       whenDate: evt.whenDate || "",
@@ -461,55 +553,113 @@ function App() {
       },
     });
 
+    setActiveMenu("event");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function createActivity() {
+  function deleteEvent(id) {
+    setEvents(events.filter((evt) => evt.id !== id));
+    if (editingEventId === id) resetEventForm();
+  }
+
+  function deleteRecurrenceGroup(groupId) {
+    if (!groupId) return;
+    setEvents(events.filter((evt) => evt.recurrenceGroupId !== groupId));
+
+    if (editingEventId) {
+      const current = events.find((evt) => evt.id === editingEventId);
+      if (current?.recurrenceGroupId === groupId) {
+        resetEventForm();
+      }
+    }
+  }
+
+  function saveActivity() {
     const payload = {
-      id: uid("act"),
+      id: activityForm.id || uid("act"),
       name: String(activityForm.name || "").trim(),
-      category: String(activityForm.category || "Autre").trim(),
+      category: String(activityForm.category || "").trim(),
+      subcategory: String(activityForm.subcategory || "").trim(),
       defaultDuration: Number(activityForm.defaultDuration || 0),
       notes: String(activityForm.notes || "").trim(),
-      createdAt: new Date().toISOString(),
+      createdAt: activityForm.id ? undefined : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
-    if (!payload.name) {
-      alert("Le nom de l'activité est obligatoire.");
-      return;
-    }
-
-    if (payload.defaultDuration <= 0) {
-      alert("La durée par défaut doit être supérieure à 0.");
+    const error = validateActivity(payload);
+    if (error) {
+      alert(error);
       return;
     }
 
     ensureCategoryExists(payload.category);
-    setActivities([...activities, payload]);
+    ensureSubcategoryExists(payload.category, payload.subcategory);
+
+    if (editingActivityId) {
+      setActivities(
+        activities.map((activity) =>
+          activity.id === editingActivityId
+            ? {
+                ...activity,
+                name: payload.name,
+                category: payload.category,
+                subcategory: payload.subcategory,
+                defaultDuration: payload.defaultDuration,
+                notes: payload.notes,
+                updatedAt: payload.updatedAt,
+              }
+            : activity
+        )
+      );
+
+      setEvents(
+        events.map((evt) =>
+          evt.activityId === editingActivityId
+            ? {
+                ...evt,
+                title: evt.type === "activite" ? payload.name : evt.title,
+                category: payload.category,
+                subcategory: payload.subcategory,
+              }
+            : evt
+        )
+      );
+    } else {
+      setActivities([...activities, payload]);
+    }
+
     resetActivityForm();
+    setActiveMenu("activities");
+  }
+
+  function editActivity(activity) {
+    setEditingActivityId(activity.id);
+    setActivityForm({
+      id: activity.id,
+      name: activity.name || "",
+      category: activity.category || "Autre",
+      subcategory: activity.subcategory || "Autre",
+      defaultDuration: Number(activity.defaultDuration ?? 60),
+      notes: activity.notes || "",
+    });
+    setActiveMenu("activities");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function removeActivity(activityId) {
     const linked = events.some((evt) => evt.activityId === activityId);
     if (linked) {
       const ok = window.confirm(
-        "Cette activité est utilisée dans des événements. Elle sera supprimée du catalogue, mais les événements déjà créés resteront conservés."
+        "Cette activité est utilisée dans des événements. Elle sera supprimée du catalogue, mais les événements déjà créés seront conservés."
       );
       if (!ok) return;
     }
-    setActivities(activities.filter((a) => a.id !== activityId));
-  }
 
-  function onActivitySelected(activityId) {
-    const activity = getActivityById(activityId);
-    setEventForm((prev) => ({
-      ...prev,
-      activityId,
-      title: activity?.name || "",
-      category: activity?.category || prev.category,
-      duration: activity?.defaultDuration || prev.duration,
-      notes: prev.notes || activity?.notes || "",
-    }));
+    setActivities(activities.filter((a) => a.id !== activityId));
+
+    if (editingActivityId === activityId) {
+      resetActivityForm();
+    }
   }
 
   function exportData() {
@@ -519,7 +669,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "agenda-avf-r2c.json";
+    link.download = "agenda-avf-r2c-v3.json";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -552,6 +702,7 @@ function App() {
               title: String(item.title ?? ""),
               activityId: String(item.activityId ?? ""),
               category: String(item.category ?? "Autre"),
+              subcategory: String(item.subcategory ?? "Autre"),
               who: String(item.who ?? ""),
               where: String(item.where ?? ""),
               whenDate: String(item.whenDate ?? ""),
@@ -571,20 +722,23 @@ function App() {
               id: item.id ?? `import-act-${Date.now()}-${index}`,
               name: String(item.name ?? ""),
               category: String(item.category ?? "Autre"),
+              subcategory: String(item.subcategory ?? "Autre"),
               defaultDuration: Number(item.defaultDuration ?? 60),
               notes: String(item.notes ?? ""),
               createdAt: item.createdAt ?? new Date().toISOString(),
+              updatedAt: item.updatedAt ?? new Date().toISOString(),
             }))
           : DEFAULT_ACTIVITIES;
 
-        const importedCategories = Array.isArray(parsed.categories)
-          ? Array.from(new Set([...DEFAULT_CATEGORIES, ...parsed.categories.map(String)]))
-          : DEFAULT_CATEGORIES;
+        const importedCategoryOptions =
+          parsed.categoryOptions && typeof parsed.categoryOptions === "object"
+            ? parsed.categoryOptions
+            : DEFAULT_CATEGORY_OPTIONS;
 
         setData({
           events: importedEvents,
           activities: importedActivities.length ? importedActivities : DEFAULT_ACTIVITIES,
-          categories: importedCategories.length ? importedCategories : DEFAULT_CATEGORIES,
+          categoryOptions: importedCategoryOptions,
         });
 
         resetEventForm();
@@ -642,6 +796,18 @@ function App() {
       a.getMonth() === b.getMonth() &&
       a.getDate() === b.getDate()
     );
+  }
+
+  function startOfDay(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function endOfDay(date) {
+    const d = new Date(date);
+    d.setHours(23, 59, 59, 999);
+    return d;
   }
 
   function getStartOfWeek(date) {
@@ -739,20 +905,24 @@ function App() {
     if (viewMode === "jour") {
       return evtDate.toDateString() === currentDate.toDateString();
     }
+
     if (viewMode === "semaine") {
       const start = getStartOfWeek(currentDate);
       const end = getEndOfWeek(currentDate);
       return evtDate >= start && evtDate <= end;
     }
+
     if (viewMode === "mois") {
       return (
         evtDate.getMonth() === currentDate.getMonth() &&
         evtDate.getFullYear() === currentDate.getFullYear()
       );
     }
+
     if (viewMode === "annee") {
       return evtDate.getFullYear() === currentDate.getFullYear();
     }
+
     return true;
   }
 
@@ -822,6 +992,89 @@ function App() {
     }
   }
 
+  function getStatsRange() {
+    if (statsFilter.mode === "current") {
+      if (viewMode === "jour") {
+        return {
+          start: startOfDay(currentDate),
+          end: endOfDay(currentDate),
+          label: "Période affichée : jour",
+        };
+      }
+      if (viewMode === "semaine") {
+        return {
+          start: getStartOfWeek(currentDate),
+          end: getEndOfWeek(currentDate),
+          label: "Période affichée : semaine",
+        };
+      }
+      if (viewMode === "mois") {
+        return {
+          start: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 0, 0),
+          end: new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999),
+          label: "Période affichée : mois",
+        };
+      }
+      return {
+        start: new Date(currentDate.getFullYear(), 0, 1, 0, 0, 0, 0),
+        end: new Date(currentDate.getFullYear(), 11, 31, 23, 59, 59, 999),
+        label: "Période affichée : année",
+      };
+    }
+
+    if (statsFilter.mode === "week") {
+      return {
+        start: getStartOfWeek(new Date()),
+        end: getEndOfWeek(new Date()),
+        label: "Cette semaine",
+      };
+    }
+
+    if (statsFilter.mode === "month") {
+      const now = new Date();
+      return {
+        start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+        end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+        label: "Ce mois",
+      };
+    }
+
+    if (statsFilter.mode === "year") {
+      const now = new Date();
+      return {
+        start: new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0),
+        end: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999),
+        label: "Cette année",
+      };
+    }
+
+    if (statsFilter.mode === "custom") {
+      const start = statsFilter.customStart
+        ? new Date(`${statsFilter.customStart}T00:00:00`)
+        : null;
+      const end = statsFilter.customEnd
+        ? new Date(`${statsFilter.customEnd}T23:59:59`)
+        : null;
+
+      return {
+        start,
+        end,
+        label: "Période personnalisée",
+      };
+    }
+
+    return { start: null, end: null, label: "Toutes dates" };
+  }
+
+  function isEventInStatsRange(evt) {
+    const { start, end } = getStatsRange();
+    const evtDate = getDateTimeFromEvent(evt);
+
+    if (start && evtDate < start) return false;
+    if (end && evtDate > end) return false;
+    return true;
+  }
+
   function formatMinutes(totalMinutes) {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -837,7 +1090,7 @@ function App() {
     )}`;
   }
 
-  const filteredEvents = useMemo(() => {
+  const filteredAgendaEvents = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return [...events]
@@ -850,7 +1103,8 @@ function App() {
           evt.how,
           evt.why,
           evt.notes,
-          evt.category,
+          resolveEventCategory(evt),
+          resolveEventSubcategory(evt),
           evt.type,
         ]
           .filter(Boolean)
@@ -860,42 +1114,75 @@ function App() {
         return !q || haystack.includes(q);
       })
       .filter((evt) => statusFilter === "tous" || evt.status === statusFilter)
-      .filter((evt) => categoryFilter === "toutes" || getResolvedCategory(evt) === categoryFilter)
+      .filter((evt) => categoryFilter === "toutes" || resolveEventCategory(evt) === categoryFilter)
+      .filter(
+        (evt) =>
+          subcategoryFilter === "toutes" || resolveEventSubcategory(evt) === subcategoryFilter
+      )
       .filter((evt) => typeFilter === "tous" || evt.type === typeFilter)
       .filter((evt) => !showOnlyConflicts || hasConflict(evt))
       .sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b));
-  }, [events, currentDate, viewMode, search, statusFilter, categoryFilter, typeFilter, showOnlyConflicts]);
+  }, [
+    events,
+    currentDate,
+    viewMode,
+    search,
+    statusFilter,
+    categoryFilter,
+    subcategoryFilter,
+    typeFilter,
+    showOnlyConflicts,
+  ]);
+
+  const statsEvents = useMemo(() => {
+    return [...events]
+      .filter((evt) => isEventInStatsRange(evt))
+      .filter((evt) => statusFilter === "tous" || evt.status === statusFilter)
+      .filter((evt) => categoryFilter === "toutes" || resolveEventCategory(evt) === categoryFilter)
+      .filter(
+        (evt) =>
+          subcategoryFilter === "toutes" || resolveEventSubcategory(evt) === subcategoryFilter
+      )
+      .filter((evt) => typeFilter === "tous" || evt.type === typeFilter)
+      .sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b));
+  }, [events, statsFilter, statusFilter, categoryFilter, subcategoryFilter, typeFilter, currentDate, viewMode]);
 
   const stats = useMemo(() => {
-    const count = filteredEvents.length;
-    const rdvCount = filteredEvents.filter((e) => e.type === "rdv").length;
-    const activityCount = filteredEvents.filter((e) => e.type === "activite").length;
-    const duration = filteredEvents.reduce((sum, e) => sum + Number(e.duration || 0), 0);
-    const travel = filteredEvents.reduce(
+    const count = statsEvents.length;
+    const rdvCount = statsEvents.filter((e) => e.type === "rdv").length;
+    const activityCount = statsEvents.filter((e) => e.type === "activite").length;
+    const duration = statsEvents.reduce((sum, e) => sum + Number(e.duration || 0), 0);
+    const travel = statsEvents.reduce(
       (sum, e) => sum + Number(e.travelBefore || 0) + Number(e.travelAfter || 0),
       0
     );
-    const mobilized = filteredEvents.reduce((sum, e) => sum + getMobilizedMinutes(e), 0);
-    const conflicts = filteredEvents.filter((e) => hasConflict(e)).length;
-    const confirmed = filteredEvents.filter((e) => e.status === "confirmé").length;
-    const completed = filteredEvents.filter((e) => e.status === "terminé").length;
-    const cancelled = filteredEvents.filter((e) => e.status === "annulé").length;
+    const mobilized = statsEvents.reduce((sum, e) => sum + getMobilizedMinutes(e), 0);
+    const conflicts = statsEvents.filter((e) => hasConflict(e)).length;
+    const confirmed = statsEvents.filter((e) => e.status === "confirmé").length;
+    const completed = statsEvents.filter((e) => e.status === "terminé").length;
+    const cancelled = statsEvents.filter((e) => e.status === "annulé").length;
     const uniquePeople = new Set(
-      filteredEvents.map((e) => String(e.who || "").trim()).filter(Boolean)
+      statsEvents.map((e) => String(e.who || "").trim()).filter(Boolean)
     ).size;
 
-    const byCategory = filteredEvents.reduce((acc, e) => {
-      const cat = getResolvedCategory(e);
+    const byCategory = statsEvents.reduce((acc, e) => {
+      const cat = resolveEventCategory(e);
       acc[cat] = (acc[cat] || 0) + 1;
       return acc;
     }, {});
 
-    const topCategoryEntry =
-      Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0] || null;
+    const bySubcategory = statsEvents.reduce((acc, e) => {
+      const sub = resolveEventSubcategory(e);
+      acc[sub] = (acc[sub] || 0) + 1;
+      return acc;
+    }, {});
 
     const activeBase = count - cancelled;
     const completionRate = activeBase > 0 ? Math.round((completed / activeBase) * 100) : 0;
     const confirmationRate = activeBase > 0 ? Math.round((confirmed / activeBase) * 100) : 0;
+
+    const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0] || null;
+    const topSubcategory = Object.entries(bySubcategory).sort((a, b) => b[1] - a[1])[0] || null;
 
     return {
       count,
@@ -911,14 +1198,19 @@ function App() {
       uniquePeople,
       completionRate,
       confirmationRate,
-      topCategory: topCategoryEntry ? `${topCategoryEntry[0]} (${topCategoryEntry[1]})` : "—",
+      topCategory: topCategory ? `${topCategory[0]} (${topCategory[1]})` : "—",
+      topSubcategory: topSubcategory ? `${topSubcategory[0]} (${topSubcategory[1]})` : "—",
       byCategory,
+      bySubcategory,
     };
-  }, [filteredEvents, events]);
+  }, [statsEvents]);
 
   const timelineEvents = useMemo(() => {
-    return [...filteredEvents].sort((a, b) => getEffectiveStart(a) - getEffectiveStart(b));
-  }, [filteredEvents]);
+    return [...filteredAgendaEvents].sort((a, b) => getEffectiveStart(a) - getEffectiveStart(b));
+  }, [filteredAgendaEvents]);
+
+  const currentSubcategoriesForFilter =
+    categoryFilter !== "toutes" ? getSubcategories(categoryFilter) : [];
 
   const statusColors = {
     prévu: {
@@ -964,7 +1256,7 @@ function App() {
       color: "#0f172a",
     },
     wrapper: {
-      maxWidth: 1400,
+      maxWidth: 1440,
       margin: "0 auto",
     },
     hero: {
@@ -985,6 +1277,21 @@ function App() {
       marginBottom: 0,
       color: "rgba(255,255,255,0.92)",
       lineHeight: 1.5,
+    },
+    menuBar: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 10,
+      marginBottom: 18,
+    },
+    menuButton: {
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: "1px solid #cbd5e1",
+      background: "#ffffff",
+      color: "#0f172a",
+      fontWeight: 800,
+      cursor: "pointer",
     },
     card: {
       background: "rgba(255,255,255,0.96)",
@@ -1093,7 +1400,7 @@ function App() {
       border: "1px solid #e2e8f0",
     },
     statValue: {
-      fontSize: 26,
+      fontSize: 25,
       fontWeight: 800,
       marginTop: 6,
     },
@@ -1442,7 +1749,7 @@ function App() {
   }
 
   function renderDayTimeline() {
-    const dayRdvs = timelineEvents.filter((evt) =>
+    const dayEvents = timelineEvents.filter((evt) =>
       sameDay(new Date(`${evt.whenDate}T12:00:00`), currentDate)
     );
 
@@ -1451,12 +1758,11 @@ function App() {
         <div style={styles.dayTimelineWrap}>
           <div style={styles.dayTimelineGrid}>
             <div style={styles.timeColumn}>{renderHourLabels()}</div>
-
             <div style={styles.dayCanvas}>
-              {dayRdvs.length === 0 ? (
+              {dayEvents.length === 0 ? (
                 <div style={styles.timelineEmpty}>Aucun événement sur cette journée.</div>
               ) : (
-                dayRdvs.map((evt) => {
+                dayEvents.map((evt) => {
                   const start = getEffectiveStart(evt);
                   const end = getEffectiveEnd(evt);
 
@@ -1465,9 +1771,8 @@ function App() {
                       <div style={styles.timelineEventTitle}>{evt.title}</div>
                       <div style={styles.timelineEventMeta}>{formatRangeHour(start, end)}</div>
                       <div style={styles.timelineEventMeta}>
-                        {evt.type === "rdv" ? "RDV" : "Activité"} · {evt.duration} min
+                        {evt.type === "rdv" ? "RDV" : "Activité"} · {resolveEventCategory(evt)} · {resolveEventSubcategory(evt)}
                       </div>
-                      <div style={styles.timelineEventMeta}>{getResolvedCategory(evt)}</div>
                       {evt.where ? <div style={styles.timelineEventMeta}>{evt.where}</div> : null}
                     </div>
                   );
@@ -1516,7 +1821,7 @@ function App() {
                       <div key={evt.id} style={getTimelineEventStyle(evt)}>
                         <div style={styles.timelineEventTitle}>{evt.title}</div>
                         <div style={styles.timelineEventMeta}>{formatRangeHour(start, end)}</div>
-                        <div style={styles.timelineEventMeta}>{getResolvedCategory(evt)}</div>
+                        <div style={styles.timelineEventMeta}>{resolveEventSubcategory(evt)}</div>
                         {evt.who ? <div style={styles.timelineEventMeta}>{evt.who}</div> : null}
                       </div>
                     );
@@ -1609,6 +1914,7 @@ function App() {
 
   function getMonthMiniDays(year, monthIndex) {
     const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
     return Array.from({ length: lastDay }, (_, i) => {
       const day = new Date(year, monthIndex, i + 1);
       const count = timelineEvents.filter((evt) =>
@@ -1747,21 +2053,375 @@ function App() {
     );
   }
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.wrapper}>
-        <div style={styles.hero}>
-          <h1 style={styles.heroTitle}>Agenda RDV / Activités</h1>
-          <p style={styles.heroText}>
-            Gestion des rendez-vous et activités avec catégories AVF / R2C, création
-            d’activités, récurrence, conflits, timeline et indicateurs fiables.
-          </p>
+  function renderMenu() {
+    const items = [
+      { key: "agenda", label: "Agenda" },
+      { key: "event", label: editingEventId ? "Modifier événement" : "Nouvel événement" },
+      { key: "activities", label: "Activités" },
+      { key: "stats", label: "Statistiques" },
+    ];
+
+    return (
+      <div style={styles.menuBar}>
+        {items.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            style={{
+              ...styles.menuButton,
+              background:
+                activeMenu === item.key
+                  ? "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)"
+                  : "#ffffff",
+              color: activeMenu === item.key ? "#ffffff" : "#0f172a",
+              border: activeMenu === item.key ? "none" : "1px solid #cbd5e1",
+            }}
+            onClick={() => setActiveMenu(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+
+        <button type="button" style={styles.buttonSecondary} onClick={exportData}>
+          Exporter JSON
+        </button>
+
+        <button
+          type="button"
+          style={styles.buttonSecondary}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Importer JSON
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json"
+          style={{ display: "none" }}
+          onChange={importData}
+        />
+      </div>
+    );
+  }
+
+  function renderEventForm() {
+    const eventSubcategories = getSubcategories(eventForm.category);
+
+    return (
+      <div style={styles.card}>
+        <h2 style={styles.sectionTitle}>
+          {editingEventId ? "Modifier un événement" : "Créer un événement"}
+        </h2>
+        <p style={styles.sectionText}>
+          Parcours optimisé : type, catégorie, sous-type, puis date et durée.
+        </p>
+
+        <div style={styles.grid}>
+          <div>
+            <label style={styles.label}>Type</label>
+            <select
+              style={styles.input}
+              name="type"
+              value={eventForm.type}
+              onChange={handleEventChange}
+            >
+              <option value="rdv">Rendez-vous</option>
+              <option value="activite">Activité</option>
+            </select>
+          </div>
+
+          {eventForm.type === "activite" ? (
+            <div>
+              <label style={styles.label}>Activité du catalogue</label>
+              <select
+                style={styles.input}
+                name="activityId"
+                value={eventForm.activityId}
+                onChange={(e) => onActivitySelected(e.target.value)}
+              >
+                <option value="">Sélectionner une activité</option>
+                {activities
+                  .filter((a) => !eventForm.category || a.category === eventForm.category)
+                  .map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.name} · {activity.category} · {activity.subcategory}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div>
+            <label style={styles.label}>Catégorie</label>
+            <select
+              style={styles.input}
+              name="category"
+              value={eventForm.category}
+              onChange={handleEventChange}
+            >
+              {getCategories().map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Sous-type</label>
+            <select
+              style={styles.input}
+              name="subcategory"
+              value={eventForm.subcategory}
+              onChange={handleEventChange}
+            >
+              {eventSubcategories.map((sub) => (
+                <option key={sub} value={sub}>
+                  {sub}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Titre *</label>
+            <input
+              style={styles.input}
+              name="title"
+              value={eventForm.title}
+              onChange={handleEventChange}
+              placeholder="Titre de l’événement"
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Qui</label>
+            <input
+              style={styles.input}
+              name="who"
+              value={eventForm.who}
+              onChange={handleEventChange}
+              placeholder="Personne / groupe / partenaire"
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Où</label>
+            <input
+              style={styles.input}
+              name="where"
+              value={eventForm.where}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Comment</label>
+            <input
+              style={styles.input}
+              name="how"
+              value={eventForm.how}
+              onChange={handleEventChange}
+              placeholder="présentiel, téléphone, visio..."
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Objectif</label>
+            <input
+              style={styles.input}
+              name="why"
+              value={eventForm.why}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Date *</label>
+            <input
+              style={styles.input}
+              type="date"
+              name="whenDate"
+              value={eventForm.whenDate}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Heure *</label>
+            <input
+              style={styles.input}
+              type="time"
+              name="whenStart"
+              value={eventForm.whenStart}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Durée (min)</label>
+            <input
+              style={styles.input}
+              type="number"
+              name="duration"
+              value={eventForm.duration}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Trajet avant (min)</label>
+            <input
+              style={styles.input}
+              type="number"
+              name="travelBefore"
+              value={eventForm.travelBefore}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Trajet après (min)</label>
+            <input
+              style={styles.input}
+              type="number"
+              name="travelAfter"
+              value={eventForm.travelAfter}
+              onChange={handleEventChange}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Statut</label>
+            <select
+              style={styles.input}
+              name="status"
+              value={eventForm.status}
+              onChange={handleEventChange}
+            >
+              <option value="prévu">Prévu</option>
+              <option value="confirmé">Confirmé</option>
+              <option value="terminé">Terminé</option>
+              <option value="annulé">Annulé</option>
+            </select>
+          </div>
         </div>
 
+        <div
+          style={{
+            marginTop: 18,
+            padding: 14,
+            borderRadius: 16,
+            border: "1px solid #e2e8f0",
+            background: "#f8fafc",
+          }}
+        >
+          <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
+            <input
+              type="checkbox"
+              name="recurrence.enabled"
+              checked={eventForm.recurrence.enabled}
+              onChange={handleEventChange}
+              disabled={Boolean(editingEventId)}
+            />
+            Activer la récurrence
+          </label>
+
+          {editingEventId ? (
+            <p style={{ ...styles.subtle, marginTop: 10 }}>
+              En modification, seule l’occurrence sélectionnée est modifiée.
+            </p>
+          ) : null}
+
+          {eventForm.recurrence.enabled && !editingEventId ? (
+            <div style={{ ...styles.grid, marginTop: 12 }}>
+              <div>
+                <label style={styles.label}>Fréquence</label>
+                <select
+                  style={styles.input}
+                  name="recurrence.frequency"
+                  value={eventForm.recurrence.frequency}
+                  onChange={handleEventChange}
+                >
+                  <option value="daily">Tous les jours</option>
+                  <option value="weekly">Toutes les semaines</option>
+                  <option value="monthly">Tous les mois</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={styles.label}>Intervalle</label>
+                <input
+                  style={styles.input}
+                  type="number"
+                  min="1"
+                  name="recurrence.interval"
+                  value={eventForm.recurrence.interval}
+                  onChange={handleEventChange}
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Nombre d’occurrences</label>
+                <input
+                  style={styles.input}
+                  type="number"
+                  min="1"
+                  name="recurrence.count"
+                  value={eventForm.recurrence.count}
+                  onChange={handleEventChange}
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Ou date de fin</label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  name="recurrence.until"
+                  value={eventForm.recurrence.until}
+                  onChange={handleEventChange}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <label style={styles.label}>Notes</label>
+          <textarea
+            style={styles.textarea}
+            name="notes"
+            value={eventForm.notes}
+            onChange={handleEventChange}
+          />
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <button type="button" style={styles.buttonPrimary} onClick={addOrUpdateEvent}>
+            {editingEventId ? "Enregistrer" : "Ajouter"}
+          </button>
+
+          <button type="button" style={styles.buttonSecondary} onClick={resetEventForm}>
+            Réinitialiser
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderActivitiesPanel() {
+    const activitySubcategories = getSubcategories(activityForm.category);
+
+    return (
+      <>
         <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Créer une activité du catalogue</h2>
+          <h2 style={styles.sectionTitle}>
+            {editingActivityId ? "Modifier une activité" : "Créer une activité"}
+          </h2>
           <p style={styles.sectionText}>
-            Une activité créée ici peut ensuite être réutilisée rapidement dans les événements.
+            Une activité peut appartenir à n’importe quelle catégorie. Exemple : R2C → marche nordique, course à pied, nordic tonic, réunion, autre.
           </p>
 
           <div style={styles.grid}>
@@ -1772,21 +2432,37 @@ function App() {
                 name="name"
                 value={activityForm.name}
                 onChange={handleActivityChange}
-                placeholder="Ex. Atelier AVF, Réunion R2C..."
+                placeholder="Ex. Marche nordique"
               />
             </div>
 
             <div>
-              <label style={styles.label}>Catégorie</label>
+              <label style={styles.label}>Catégorie *</label>
               <select
                 style={styles.input}
                 name="category"
                 value={activityForm.category}
                 onChange={handleActivityChange}
               >
-                {categories.map((cat) => (
+                {getCategories().map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.label}>Sous-type *</label>
+              <select
+                style={styles.input}
+                name="subcategory"
+                value={activityForm.subcategory}
+                onChange={handleActivityChange}
+              >
+                {activitySubcategories.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
                   </option>
                 ))}
               </select>
@@ -1805,7 +2481,7 @@ function App() {
           </div>
 
           <div style={{ marginTop: 14 }}>
-            <label style={styles.label}>Notes activité</label>
+            <label style={styles.label}>Notes</label>
             <textarea
               style={styles.textarea}
               name="notes"
@@ -1815,381 +2491,116 @@ function App() {
           </div>
 
           <div style={{ marginTop: 18 }}>
-            <button type="button" style={styles.buttonPrimary} onClick={createActivity}>
-              Ajouter l’activité
+            <button type="button" style={styles.buttonPrimary} onClick={saveActivity}>
+              {editingActivityId ? "Enregistrer l’activité" : "Ajouter l’activité"}
             </button>
+
             <button type="button" style={styles.buttonSecondary} onClick={resetActivityForm}>
               Réinitialiser
             </button>
           </div>
-
-          <div style={styles.divider} />
-
-          <div style={styles.listCompact}>
-            {activities.length === 0 ? (
-              <p style={styles.subtle}>Aucune activité enregistrée.</p>
-            ) : (
-              activities.map((activity) => (
-                <div
-                  key={activity.id}
-                  style={{
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 16,
-                    padding: 14,
-                    background: "#fff",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <div>
-                      <strong>{activity.name}</strong>
-                      <div style={{ marginTop: 6 }}>
-                        <span
-                          style={{
-                            ...styles.inlineBadge,
-                            background: "#eef2ff",
-                            color: "#4338ca",
-                          }}
-                        >
-                          {activity.category}
-                        </span>
-                        <span
-                          style={{
-                            ...styles.inlineBadge,
-                            background: "#f8fafc",
-                            color: "#334155",
-                          }}
-                        >
-                          {activity.defaultDuration} min
-                        </span>
-                      </div>
-                      {activity.notes ? (
-                        <div style={{ marginTop: 8, color: "#475569", fontSize: 14 }}>
-                          {activity.notes}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        style={styles.buttonDanger}
-                        onClick={() => removeActivity(activity.id)}
-                      >
-                        Supprimer
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>
-            {editingEventId ? "Modifier un événement" : "Créer un événement"}
-          </h2>
-          <p style={styles.sectionText}>
-            Un événement peut être un rendez-vous ou une activité. Les séries récurrentes sont créées automatiquement.
-          </p>
+          <h2 style={styles.sectionTitle}>Catalogue des activités</h2>
 
-          <div style={styles.grid}>
-            <div>
-              <label style={styles.label}>Type</label>
-              <select
-                style={styles.input}
-                name="type"
-                value={eventForm.type}
-                onChange={handleEventChange}
-              >
-                <option value="rdv">Rendez-vous</option>
-                <option value="activite">Activité</option>
-              </select>
-            </div>
-
-            {eventForm.type === "activite" ? (
-              <div>
-                <label style={styles.label}>Activité du catalogue</label>
-                <select
-                  style={styles.input}
-                  name="activityId"
-                  value={eventForm.activityId}
-                  onChange={(e) => onActivitySelected(e.target.value)}
-                >
-                  <option value="">Sélectionner une activité</option>
-                  {activities.map((activity) => (
-                    <option key={activity.id} value={activity.id}>
-                      {activity.name} · {activity.category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            <div>
-              <label style={styles.label}>Titre *</label>
-              <input
-                style={styles.input}
-                name="title"
-                value={eventForm.title}
-                onChange={handleEventChange}
-                placeholder={eventForm.type === "activite" ? "Nom de l’activité" : "Nom du rendez-vous"}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Catégorie</label>
-              <select
-                style={styles.input}
-                name="category"
-                value={eventForm.category}
-                onChange={handleEventChange}
-              >
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Qui</label>
-              <input
-                style={styles.input}
-                name="who"
-                value={eventForm.who}
-                onChange={handleEventChange}
-                placeholder="Personne / partenaire / groupe"
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Où</label>
-              <input
-                style={styles.input}
-                name="where"
-                value={eventForm.where}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Comment</label>
-              <input
-                style={styles.input}
-                name="how"
-                value={eventForm.how}
-                onChange={handleEventChange}
-                placeholder="présentiel, visio, téléphone..."
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Pourquoi / objectif</label>
-              <input
-                style={styles.input}
-                name="why"
-                value={eventForm.why}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Date *</label>
-              <input
-                style={styles.input}
-                type="date"
-                name="whenDate"
-                value={eventForm.whenDate}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Heure *</label>
-              <input
-                style={styles.input}
-                type="time"
-                name="whenStart"
-                value={eventForm.whenStart}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Durée (min)</label>
-              <input
-                style={styles.input}
-                type="number"
-                name="duration"
-                value={eventForm.duration}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Temps trajet avant (min)</label>
-              <input
-                style={styles.input}
-                type="number"
-                name="travelBefore"
-                value={eventForm.travelBefore}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Temps trajet après (min)</label>
-              <input
-                style={styles.input}
-                type="number"
-                name="travelAfter"
-                value={eventForm.travelAfter}
-                onChange={handleEventChange}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Statut</label>
-              <select
-                style={styles.input}
-                name="status"
-                value={eventForm.status}
-                onChange={handleEventChange}
-              >
-                <option value="prévu">Prévu</option>
-                <option value="confirmé">Confirmé</option>
-                <option value="terminé">Terminé</option>
-                <option value="annulé">Annulé</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 18, padding: 14, borderRadius: 16, border: "1px solid #e2e8f0", background: "#f8fafc" }}>
-            <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
-              <input
-                type="checkbox"
-                name="recurrence.enabled"
-                checked={eventForm.recurrence.enabled}
-                onChange={handleEventChange}
-                disabled={Boolean(editingEventId)}
-              />
-              Activer la récurrence
-            </label>
-
-            {editingEventId ? (
-              <p style={{ ...styles.subtle, marginTop: 10 }}>
-                En mode modification, seule l’occurrence sélectionnée est modifiée.
-              </p>
-            ) : null}
-
-            {eventForm.recurrence.enabled && !editingEventId ? (
-              <div style={{ ...styles.grid, marginTop: 12 }}>
-                <div>
-                  <label style={styles.label}>Fréquence</label>
-                  <select
-                    style={styles.input}
-                    name="recurrence.frequency"
-                    value={eventForm.recurrence.frequency}
-                    onChange={handleEventChange}
+          {activities.length === 0 ? (
+            <p style={styles.subtle}>Aucune activité enregistrée.</p>
+          ) : (
+            <div style={styles.listCompact}>
+              {activities
+                .slice()
+                .sort((a, b) => {
+                  if (a.category !== b.category) return a.category.localeCompare(b.category);
+                  if (a.subcategory !== b.subcategory) return a.subcategory.localeCompare(b.subcategory);
+                  return a.name.localeCompare(b.name);
+                })
+                .map((activity) => (
+                  <div
+                    key={activity.id}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 16,
+                      padding: 14,
+                      background: "#fff",
+                    }}
                   >
-                    <option value="daily">Tous les jours</option>
-                    <option value="weekly">Toutes les semaines</option>
-                    <option value="monthly">Tous les mois</option>
-                  </select>
-                </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                      <div>
+                        <strong>{activity.name}</strong>
+                        <div style={{ marginTop: 6 }}>
+                          <span
+                            style={{
+                              ...styles.inlineBadge,
+                              background: "#eef2ff",
+                              color: "#4338ca",
+                            }}
+                          >
+                            {activity.category}
+                          </span>
 
-                <div>
-                  <label style={styles.label}>Intervalle</label>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    min="1"
-                    name="recurrence.interval"
-                    value={eventForm.recurrence.interval}
-                    onChange={handleEventChange}
-                  />
-                </div>
+                          <span
+                            style={{
+                              ...styles.inlineBadge,
+                              background: "#f8fafc",
+                              color: "#334155",
+                            }}
+                          >
+                            {activity.subcategory}
+                          </span>
 
-                <div>
-                  <label style={styles.label}>Nombre d’occurrences</label>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    min="1"
-                    name="recurrence.count"
-                    value={eventForm.recurrence.count}
-                    onChange={handleEventChange}
-                  />
-                </div>
+                          <span
+                            style={{
+                              ...styles.inlineBadge,
+                              background: "#f0fdf4",
+                              color: "#166534",
+                            }}
+                          >
+                            {activity.defaultDuration} min
+                          </span>
+                        </div>
 
-                <div>
-                  <label style={styles.label}>Ou date de fin</label>
-                  <input
-                    style={styles.input}
-                    type="date"
-                    name="recurrence.until"
-                    value={eventForm.recurrence.until}
-                    onChange={handleEventChange}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
+                        {activity.notes ? (
+                          <div style={{ marginTop: 8, color: "#475569", fontSize: 14 }}>
+                            {activity.notes}
+                          </div>
+                        ) : null}
+                      </div>
 
-          <div style={{ marginTop: 14 }}>
-            <label style={styles.label}>Notes</label>
-            <textarea
-              style={styles.textarea}
-              name="notes"
-              value={eventForm.notes}
-              onChange={handleEventChange}
-            />
-          </div>
+                      <div>
+                        <button
+                          type="button"
+                          style={styles.buttonSecondary}
+                          onClick={() => editActivity(activity)}
+                        >
+                          Modifier
+                        </button>
 
-          <div style={{ marginTop: 16 }}>
-            <div style={styles.badge}>Résumé</div>
-            <div style={{ fontWeight: 700 }}>
-              {eventForm.title || "Sans titre"} · {eventForm.type === "rdv" ? "Rendez-vous" : "Activité"} · {eventForm.category}
+                        <button
+                          type="button"
+                          style={styles.buttonDanger}
+                          onClick={() => removeActivity(activity.id)}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
             </div>
-          </div>
-
-          <div style={{ marginTop: 18 }}>
-            <button type="button" style={styles.buttonPrimary} onClick={addOrUpdateEvent}>
-              {editingEventId ? "Enregistrer la modification" : "Ajouter l’événement"}
-            </button>
-
-            <button type="button" style={styles.buttonSecondary} onClick={resetEventForm}>
-              Réinitialiser
-            </button>
-
-            <button type="button" style={styles.buttonSecondary} onClick={exportData}>
-              Exporter JSON
-            </button>
-
-            <button
-              type="button"
-              style={styles.buttonSecondary}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Importer JSON
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              style={{ display: "none" }}
-              onChange={importData}
-            />
-          </div>
+          )}
         </div>
+      </>
+    );
+  }
 
+  function renderAgendaPanel() {
+    return (
+      <>
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Navigation</h2>
           <p style={styles.sectionText}>
-            Navigation par jour, semaine, mois ou année.
+            Parcours rapide : navigation temporelle, filtres, puis liste ou timeline.
           </p>
 
           <div style={styles.topNav}>
@@ -2234,43 +2645,12 @@ function App() {
           {renderPeriodPicker()}
 
           <p>
-            <strong>Mode actif :</strong> {viewMode}
-          </p>
-          <p>
             <strong>Période affichée :</strong> {getPeriodLabel()}
           </p>
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Timeline</h2>
-          <p style={styles.sectionText}>
-            Vue visuelle des rendez-vous et activités sur la période sélectionnée.
-          </p>
-
-          <div style={styles.timelineLegend}>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#2563eb" }} />
-              Prévu
-            </div>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#22c55e" }} />
-              Confirmé
-            </div>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#60a5fa" }} />
-              Terminé
-            </div>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#ef4444" }} />
-              Annulé / conflit
-            </div>
-          </div>
-
-          {renderTimeline()}
-        </div>
-
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Filtres et indicateurs</h2>
+          <h2 style={styles.sectionTitle}>Filtres agenda</h2>
 
           <div style={styles.filterRow}>
             <div>
@@ -2303,12 +2683,32 @@ function App() {
               <select
                 style={styles.input}
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setSubcategoryFilter("toutes");
+                }}
               >
                 <option value="toutes">Toutes</option>
-                {categories.map((cat) => (
+                {getCategories().map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.label}>Sous-type</label>
+              <select
+                style={styles.input}
+                value={subcategoryFilter}
+                onChange={(e) => setSubcategoryFilter(e.target.value)}
+                disabled={categoryFilter === "toutes"}
+              >
+                <option value="toutes">Tous</option>
+                {currentSubcategoriesForFilter.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
                   </option>
                 ))}
               </select>
@@ -2334,99 +2734,45 @@ function App() {
                   checked={showOnlyConflicts}
                   onChange={(e) => setShowOnlyConflicts(e.target.checked)}
                 />
-                Afficher seulement les conflits
+                Seulement les conflits
               </label>
             </div>
           </div>
+        </div>
 
-          <div style={styles.statsGrid}>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Événements</div>
-              <div style={styles.statValue}>{stats.count}</div>
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>Timeline</h2>
+          <p style={styles.sectionText}>Visualisation directe de la charge et des chevauchements.</p>
+
+          <div style={styles.timelineLegend}>
+            <div style={styles.timelineLegendItem}>
+              <span style={{ ...styles.legendDot, background: "#2563eb" }} />
+              Prévu
             </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Rendez-vous</div>
-              <div style={styles.statValue}>{stats.rdvCount}</div>
+            <div style={styles.timelineLegendItem}>
+              <span style={{ ...styles.legendDot, background: "#22c55e" }} />
+              Confirmé
             </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Activités</div>
-              <div style={styles.statValue}>{stats.activityCount}</div>
+            <div style={styles.timelineLegendItem}>
+              <span style={{ ...styles.legendDot, background: "#60a5fa" }} />
+              Terminé
             </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Temps RDV / activité</div>
-              <div style={styles.statValue}>{formatMinutes(stats.duration)}</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Temps trajet</div>
-              <div style={styles.statValue}>{formatMinutes(stats.travel)}</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Temps mobilisé</div>
-              <div style={styles.statValue}>{formatMinutes(stats.mobilized)}</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Conflits</div>
-              <div style={styles.statValue}>{stats.conflicts}</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Personnes distinctes</div>
-              <div style={styles.statValue}>{stats.uniquePeople}</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Tx confirmation</div>
-              <div style={styles.statValue}>{stats.confirmationRate}%</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Tx réalisation</div>
-              <div style={styles.statValue}>{stats.completionRate}%</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Annulés</div>
-              <div style={styles.statValue}>{stats.cancelled}</div>
-            </div>
-            <div style={styles.statBox}>
-              <div style={styles.badge}>Catégorie dominante</div>
-              <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topCategory}</div>
+            <div style={styles.timelineLegendItem}>
+              <span style={{ ...styles.legendDot, background: "#ef4444" }} />
+              Annulé / conflit
             </div>
           </div>
 
-          <div style={styles.divider} />
-
-          <div style={styles.listCompact}>
-            <strong>Répartition par catégorie</strong>
-            {Object.keys(stats.byCategory).length === 0 ? (
-              <p style={styles.subtle}>Aucune donnée sur cette période.</p>
-            ) : (
-              Object.entries(stats.byCategory)
-                .sort((a, b) => b[1] - a[1])
-                .map(([cat, value]) => (
-                  <div
-                    key={cat}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 14,
-                      padding: "10px 12px",
-                      background: "#fff",
-                    }}
-                  >
-                    <span>{cat}</span>
-                    <strong>{value}</strong>
-                  </div>
-                ))
-            )}
-          </div>
+          {renderTimeline()}
         </div>
 
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Liste des événements</h2>
 
-          {filteredEvents.length === 0 ? (
+          {filteredAgendaEvents.length === 0 ? (
             <p style={styles.subtle}>Aucun événement sur cette période.</p>
           ) : (
-            filteredEvents.map((evt) => (
+            filteredAgendaEvents.map((evt) => (
               <div key={evt.id} style={styles.eventCard}>
                 <div style={styles.eventHeader}>
                   <div>
@@ -2450,7 +2796,17 @@ function App() {
                           color: "#334155",
                         }}
                       >
-                        {getResolvedCategory(evt)}
+                        {resolveEventCategory(evt)}
+                      </span>
+
+                      <span
+                        style={{
+                          ...styles.inlineBadge,
+                          background: "#fff7ed",
+                          color: "#9a3412",
+                        }}
+                      >
+                        {resolveEventSubcategory(evt)}
                       </span>
 
                       {evt.recurrenceGroupId ? (
@@ -2549,14 +2905,6 @@ function App() {
                   </div>
                 )}
 
-                {evt.recurrenceGroupId ? (
-                  <div style={{ marginBottom: 12 }}>
-                    <span style={{ ...styles.inlineBadge, background: "#faf5ff", color: "#7c3aed" }}>
-                      Série : {evt.recurrenceGroupId}
-                    </span>
-                  </div>
-                ) : null}
-
                 <div>
                   <button type="button" style={styles.buttonSecondary} onClick={() => editEvent(evt)}>
                     Modifier
@@ -2576,7 +2924,7 @@ function App() {
                       style={styles.buttonDanger}
                       onClick={() => deleteRecurrenceGroup(evt.recurrenceGroupId)}
                     >
-                      Supprimer toute la série
+                      Supprimer la série
                     </button>
                   ) : null}
                 </div>
@@ -2584,6 +2932,205 @@ function App() {
             ))
           )}
         </div>
+      </>
+    );
+  }
+
+  function renderStatsPanel() {
+    const range = getStatsRange();
+
+    return (
+      <div style={styles.card}>
+        <h2 style={styles.sectionTitle}>Statistiques</h2>
+        <p style={styles.sectionText}>
+          Les statistiques peuvent être calculées sur la période affichée ou sur une plage indépendante.
+        </p>
+
+        <div style={styles.filterRow}>
+          <div>
+            <label style={styles.label}>Période statistiques</label>
+            <select
+              style={styles.input}
+              value={statsFilter.mode}
+              onChange={(e) => setStatsFilter((prev) => ({ ...prev, mode: e.target.value }))}
+            >
+              <option value="current">Période affichée</option>
+              <option value="week">Cette semaine</option>
+              <option value="month">Ce mois</option>
+              <option value="year">Cette année</option>
+              <option value="custom">Dates personnalisées</option>
+            </select>
+          </div>
+
+          {statsFilter.mode === "custom" ? (
+            <>
+              <div>
+                <label style={styles.label}>Date début</label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={statsFilter.customStart}
+                  onChange={(e) =>
+                    setStatsFilter((prev) => ({ ...prev, customStart: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Date fin</label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={statsFilter.customEnd}
+                  onChange={(e) =>
+                    setStatsFilter((prev) => ({ ...prev, customEnd: e.target.value }))
+                  }
+                />
+              </div>
+            </>
+          ) : null}
+
+          <div>
+            <label style={styles.label}>Période retenue</label>
+            <div style={{ ...styles.input, display: "flex", alignItems: "center" }}>
+              {range.label}
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.statsGrid}>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Événements</div>
+            <div style={styles.statValue}>{stats.count}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Rendez-vous</div>
+            <div style={styles.statValue}>{stats.rdvCount}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Activités</div>
+            <div style={styles.statValue}>{stats.activityCount}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Temps activité / RDV</div>
+            <div style={styles.statValue}>{formatMinutes(stats.duration)}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Temps trajet</div>
+            <div style={styles.statValue}>{formatMinutes(stats.travel)}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Temps mobilisé</div>
+            <div style={styles.statValue}>{formatMinutes(stats.mobilized)}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Conflits</div>
+            <div style={styles.statValue}>{stats.conflicts}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Personnes distinctes</div>
+            <div style={styles.statValue}>{stats.uniquePeople}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Tx confirmation</div>
+            <div style={styles.statValue}>{stats.confirmationRate}%</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Tx réalisation</div>
+            <div style={styles.statValue}>{stats.completionRate}%</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Catégorie dominante</div>
+            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topCategory}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Sous-type dominant</div>
+            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topSubcategory}</div>
+          </div>
+        </div>
+
+        <div style={styles.divider} />
+
+        <div style={styles.grid}>
+          <div>
+            <h3 style={{ marginTop: 0 }}>Répartition par catégorie</h3>
+            <div style={styles.listCompact}>
+              {Object.keys(stats.byCategory).length === 0 ? (
+                <p style={styles.subtle}>Aucune donnée.</p>
+              ) : (
+                Object.entries(stats.byCategory)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([cat, value]) => (
+                    <div
+                      key={cat}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 14,
+                        padding: "10px 12px",
+                        background: "#fff",
+                      }}
+                    >
+                      <span>{cat}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 style={{ marginTop: 0 }}>Répartition par sous-type</h3>
+            <div style={styles.listCompact}>
+              {Object.keys(stats.bySubcategory).length === 0 ? (
+                <p style={styles.subtle}>Aucune donnée.</p>
+              ) : (
+                Object.entries(stats.bySubcategory)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([sub, value]) => (
+                    <div
+                      key={sub}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 14,
+                        padding: "10px 12px",
+                        background: "#fff",
+                      }}
+                    >
+                      <span>{sub}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.wrapper}>
+        <div style={styles.hero}>
+          <h1 style={styles.heroTitle}>Agenda RDV / Activités</h1>
+          <p style={styles.heroText}>
+            Version optimisée : menus, activités modifiables, catégories et sous-types,
+            récurrence, timeline et statistiques filtrables sur dates, semaine, mois ou année.
+          </p>
+        </div>
+
+        {renderMenu()}
+
+        {activeMenu === "agenda" && renderAgendaPanel()}
+        {activeMenu === "event" && renderEventForm()}
+        {activeMenu === "activities" && renderActivitiesPanel()}
+        {activeMenu === "stats" && renderStatsPanel()}
       </div>
     </div>
   );
