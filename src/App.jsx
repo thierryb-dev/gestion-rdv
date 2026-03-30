@@ -1,77 +1,69 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const STORAGE_KEY = "agenda-avf-r2c-v3";
+const STORAGE_KEY = "agenda-v5-ergonomique";
 
-const DEFAULT_CATEGORY_OPTIONS = {
-  AVF: ["Entretien", "Atelier", "Visite", "Réunion", "Accompagnement", "Autre"],
-  R2C: ["Marche nordique", "Course à pied", "Nordic tonic", "Réunion", "Autre"],
-  Administratif: ["Dossier", "Réunion", "Compte-rendu", "Appel", "Autre"],
-  Partenariat: ["Réunion", "Prospection", "Suivi", "Convention", "Autre"],
-  Terrain: ["Visite", "Intervention", "Animation", "Repérage", "Autre"],
-  Autre: ["Autre"],
+const DEFAULT_STRUCTURE = {
+  AVF: {
+    "Réunion": [],
+    "Activité": ["Pétanque", "Théâtre d'improvisation", "Belote"],
+    "Événement": [],
+  },
+  R2C: {
+    "Réunion": [],
+    "Sortie club": [],
+    "Activité": ["Course à pied", "Nordic tonic", "Marche nordique"],
+  },
+  "Université permanente de Nantes": {
+    "Conférence": ["Guérande", "Nantes"],
+  },
 };
 
-const DEFAULT_ACTIVITIES = [
+const DEFAULT_MODELS = [
   {
-    id: "act-r2c-marche",
-    name: "Marche nordique",
-    category: "R2C",
-    subcategory: "Marche nordique",
+    id: "model-avf-petanque",
+    domain: "AVF",
+    typeLabel: "Activité",
+    subTypeLabel: "Pétanque",
+    label: "AVF · Activité · Pétanque",
+    defaultDuration: 120,
+    notes: "",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "model-r2c-course",
+    domain: "R2C",
+    typeLabel: "Activité",
+    subTypeLabel: "Course à pied",
+    label: "R2C · Activité · Course à pied",
+    defaultDuration: 60,
+    notes: "",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "model-upn-conf-nantes",
+    domain: "Université permanente de Nantes",
+    typeLabel: "Conférence",
+    subTypeLabel: "Nantes",
+    label: "Université permanente de Nantes · Conférence · Nantes",
     defaultDuration: 90,
-    notes: "",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "act-r2c-course",
-    name: "Course à pied",
-    category: "R2C",
-    subcategory: "Course à pied",
-    defaultDuration: 60,
-    notes: "",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "act-r2c-nordic",
-    name: "Nordic tonic",
-    category: "R2C",
-    subcategory: "Nordic tonic",
-    defaultDuration: 60,
-    notes: "",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "act-r2c-reunion",
-    name: "Réunion R2C",
-    category: "R2C",
-    subcategory: "Réunion",
-    defaultDuration: 90,
-    notes: "",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "act-avf-entretien",
-    name: "Entretien AVF",
-    category: "AVF",
-    subcategory: "Entretien",
-    defaultDuration: 60,
     notes: "",
     createdAt: new Date().toISOString(),
   },
 ];
 
 const INITIAL_EVENT_FORM = {
-  type: "rdv", // rdv | activite
   title: "",
-  activityId: "",
-  category: "AVF",
-  subcategory: "Entretien",
-  who: "",
-  where: "",
-  whenDate: "",
-  whenStart: "",
+  domain: "AVF",
+  typeLabel: "Réunion",
+  subTypeLabel: "",
+  modelId: "",
+  withWho: "",
+  place: "",
+  date: "",
+  startTime: "",
   duration: 60,
-  how: "",
-  why: "",
+  channel: "",
+  objective: "",
   notes: "",
   status: "prévu",
   travelBefore: 0,
@@ -85,11 +77,12 @@ const INITIAL_EVENT_FORM = {
   },
 };
 
-const INITIAL_ACTIVITY_FORM = {
+const INITIAL_MODEL_FORM = {
   id: null,
-  name: "",
-  category: "AVF",
-  subcategory: "Entretien",
+  label: "",
+  domain: "AVF",
+  typeLabel: "Réunion",
+  subTypeLabel: "",
   defaultDuration: 60,
   notes: "",
 };
@@ -101,133 +94,193 @@ const INITIAL_STATS_FILTER = {
 };
 
 function App() {
-  const [data, setData] = useState(() => {
+  const [store, setStore] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
         return {
           events: [],
-          activities: DEFAULT_ACTIVITIES,
-          categoryOptions: DEFAULT_CATEGORY_OPTIONS,
+          structure: DEFAULT_STRUCTURE,
+          models: DEFAULT_MODELS,
         };
       }
-
       const parsed = JSON.parse(raw);
-
       return {
         events: Array.isArray(parsed.events) ? parsed.events : [],
-        activities:
-          Array.isArray(parsed.activities) && parsed.activities.length > 0
-            ? parsed.activities
-            : DEFAULT_ACTIVITIES,
-        categoryOptions:
-          parsed.categoryOptions && typeof parsed.categoryOptions === "object"
-            ? parsed.categoryOptions
-            : DEFAULT_CATEGORY_OPTIONS,
+        structure:
+          parsed.structure && typeof parsed.structure === "object"
+            ? parsed.structure
+            : DEFAULT_STRUCTURE,
+        models: Array.isArray(parsed.models) && parsed.models.length > 0 ? parsed.models : DEFAULT_MODELS,
       };
     } catch {
       return {
         events: [],
-        activities: DEFAULT_ACTIVITIES,
-        categoryOptions: DEFAULT_CATEGORY_OPTIONS,
+        structure: DEFAULT_STRUCTURE,
+        models: DEFAULT_MODELS,
       };
     }
   });
 
-  const [activeMenu, setActiveMenu] = useState("agenda"); // agenda | event | activities | stats
+  const [activeMenu, setActiveMenu] = useState("agenda"); // agenda | event | models | structure | stats
   const [eventForm, setEventForm] = useState(INITIAL_EVENT_FORM);
-  const [activityForm, setActivityForm] = useState(INITIAL_ACTIVITY_FORM);
+  const [modelForm, setModelForm] = useState(INITIAL_MODEL_FORM);
 
   const [editingEventId, setEditingEventId] = useState(null);
-  const [editingActivityId, setEditingActivityId] = useState(null);
+  const [editingSeriesGroupId, setEditingSeriesGroupId] = useState(null);
+  const [editingModelId, setEditingModelId] = useState(null);
 
   const [viewMode, setViewMode] = useState("semaine");
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("tous");
-  const [categoryFilter, setCategoryFilter] = useState("toutes");
-  const [subcategoryFilter, setSubcategoryFilter] = useState("toutes");
+  const [domainFilter, setDomainFilter] = useState("tous");
   const [typeFilter, setTypeFilter] = useState("tous");
+  const [subTypeFilter, setSubTypeFilter] = useState("tous");
   const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
 
   const [statsFilter, setStatsFilter] = useState(INITIAL_STATS_FILTER);
 
+  const [newDomainName, setNewDomainName] = useState("");
+  const [newTypeDomain, setNewTypeDomain] = useState("AVF");
+  const [newTypeName, setNewTypeName] = useState("");
+  const [newSubDomain, setNewSubDomain] = useState("AVF");
+  const [newSubTypeParent, setNewSubTypeParent] = useState("Réunion");
+  const [newSubTypeName, setNewSubTypeName] = useState("");
+
+  const [contextMenu, setContextMenu] = useState({
+    visible: false,
+    eventId: null,
+    x: 0,
+    y: 0,
+  });
+
   const fileInputRef = useRef(null);
 
-  const events = data.events;
-  const activities = data.activities;
-  const categoryOptions = data.categoryOptions;
+  const events = store.events;
+  const structure = store.structure;
+  const models = store.models;
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  }, [store]);
+
+  useEffect(() => {
+    function closeMenu() {
+      setContextMenu((prev) => ({ ...prev, visible: false }));
+    }
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, []);
 
   function uid(prefix = "id") {
     return `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`}`;
   }
 
   function setEvents(nextEvents) {
-    setData((prev) => ({ ...prev, events: nextEvents }));
+    setStore((prev) => ({ ...prev, events: nextEvents }));
   }
 
-  function setActivities(nextActivities) {
-    setData((prev) => ({ ...prev, activities: nextActivities }));
+  function setStructure(nextStructure) {
+    setStore((prev) => ({ ...prev, structure: nextStructure }));
   }
 
-  function setCategoryOptions(nextCategoryOptions) {
-    setData((prev) => ({ ...prev, categoryOptions: nextCategoryOptions }));
+  function setModels(nextModels) {
+    setStore((prev) => ({ ...prev, models: nextModels }));
   }
 
-  function getCategories() {
-    return Object.keys(categoryOptions);
+  function getDomains() {
+    return Object.keys(structure).sort((a, b) => a.localeCompare(b));
   }
 
-  function getSubcategories(category) {
-    return categoryOptions[category] || ["Autre"];
+  function getTypes(domain) {
+    if (!domain || !structure[domain]) return [];
+    return Object.keys(structure[domain]).sort((a, b) => a.localeCompare(b));
   }
 
-  function ensureCategoryExists(category) {
-    const clean = String(category || "").trim();
+  function getSubTypes(domain, typeLabel) {
+    if (!domain || !typeLabel || !structure[domain] || !structure[domain][typeLabel]) return [];
+    return [...structure[domain][typeLabel]].sort((a, b) => a.localeCompare(b));
+  }
+
+  function ensureDomainExists(domain) {
+    const clean = String(domain || "").trim();
     if (!clean) return;
-
-    if (!categoryOptions[clean]) {
-      setCategoryOptions({
-        ...categoryOptions,
-        [clean]: ["Autre"],
+    if (!structure[clean]) {
+      setStructure({
+        ...structure,
+        [clean]: {},
       });
     }
   }
 
-  function ensureSubcategoryExists(category, subcategory) {
-    const cat = String(category || "").trim();
-    const sub = String(subcategory || "").trim();
-    if (!cat || !sub) return;
+  function ensureTypeExists(domain, typeLabel) {
+    const cleanDomain = String(domain || "").trim();
+    const cleanType = String(typeLabel || "").trim();
+    if (!cleanDomain || !cleanType) return;
 
-    if (!categoryOptions[cat]) {
-      setCategoryOptions({
-        ...categoryOptions,
-        [cat]: [sub],
-      });
-      return;
-    }
-
-    if (!categoryOptions[cat].includes(sub)) {
-      setCategoryOptions({
-        ...categoryOptions,
-        [cat]: [...categoryOptions[cat], sub],
+    const currentDomain = structure[cleanDomain] || {};
+    if (!currentDomain[cleanType]) {
+      setStructure({
+        ...structure,
+        [cleanDomain]: {
+          ...currentDomain,
+          [cleanType]: [],
+        },
       });
     }
+  }
+
+  function ensureSubTypeExists(domain, typeLabel, subTypeLabel) {
+    const cleanDomain = String(domain || "").trim();
+    const cleanType = String(typeLabel || "").trim();
+    const cleanSub = String(subTypeLabel || "").trim();
+    if (!cleanDomain || !cleanType || !cleanSub) return;
+
+    const currentDomain = structure[cleanDomain] || {};
+    const currentSubs = Array.isArray(currentDomain[cleanType]) ? currentDomain[cleanType] : [];
+
+    if (!currentSubs.includes(cleanSub)) {
+      setStructure({
+        ...structure,
+        [cleanDomain]: {
+          ...currentDomain,
+          [cleanType]: [...currentSubs, cleanSub],
+        },
+      });
+    }
+  }
+
+  function normalizeChain(domain, typeLabel, subTypeLabel) {
+    const safeDomain = String(domain || "").trim();
+    const safeType = String(typeLabel || "").trim();
+    const safeSub = String(subTypeLabel || "").trim();
+
+    return {
+      domain: safeDomain,
+      typeLabel: safeType,
+      subTypeLabel: safeSub,
+    };
+  }
+
+  function getModelById(id) {
+    return models.find((m) => m.id === id) || null;
   }
 
   function resetEventForm() {
     setEventForm(INITIAL_EVENT_FORM);
     setEditingEventId(null);
+    setEditingSeriesGroupId(null);
   }
 
-  function resetActivityForm() {
-    setActivityForm(INITIAL_ACTIVITY_FORM);
-    setEditingActivityId(null);
+  function resetModelForm() {
+    setModelForm(INITIAL_MODEL_FORM);
+    setEditingModelId(null);
   }
 
   function handleEventChange(e) {
@@ -235,15 +288,15 @@ function App() {
     const numericFields = ["duration", "travelBefore", "travelAfter"];
 
     if (name.startsWith("recurrence.")) {
-      const recurrenceKey = name.replace("recurrence.", "");
+      const key = name.replace("recurrence.", "");
       setEventForm((prev) => ({
         ...prev,
         recurrence: {
           ...prev.recurrence,
-          [recurrenceKey]:
-            recurrenceKey === "enabled"
+          [key]:
+            key === "enabled"
               ? checked
-              : ["interval", "count"].includes(recurrenceKey)
+              : ["interval", "count"].includes(key)
                 ? value === ""
                   ? ""
                   : Number(value)
@@ -253,12 +306,27 @@ function App() {
       return;
     }
 
-    if (name === "category") {
-      const nextSubs = getSubcategories(value);
+    if (name === "domain") {
+      const nextTypes = getTypes(value);
+      const nextType = nextTypes[0] || "";
+      const nextSubs = getSubTypes(value, nextType);
       setEventForm((prev) => ({
         ...prev,
-        category: value,
-        subcategory: nextSubs[0] || "Autre",
+        domain: value,
+        typeLabel: nextType,
+        subTypeLabel: nextSubs[0] || "",
+        modelId: "",
+      }));
+      return;
+    }
+
+    if (name === "typeLabel") {
+      const nextSubs = getSubTypes(eventForm.domain, value);
+      setEventForm((prev) => ({
+        ...prev,
+        typeLabel: value,
+        subTypeLabel: nextSubs[0] || "",
+        modelId: "",
       }));
       return;
     }
@@ -276,52 +344,44 @@ function App() {
     }));
   }
 
-  function handleActivityChange(e) {
+  function handleModelChange(e) {
     const { name, value } = e.target;
 
-    if (name === "category") {
-      const nextSubs = getSubcategories(value);
-      setActivityForm((prev) => ({
+    if (name === "domain") {
+      const nextTypes = getTypes(value);
+      const nextType = nextTypes[0] || "";
+      const nextSubs = getSubTypes(value, nextType);
+      setModelForm((prev) => ({
         ...prev,
-        category: value,
-        subcategory: nextSubs[0] || "Autre",
+        domain: value,
+        typeLabel: nextType,
+        subTypeLabel: nextSubs[0] || "",
       }));
       return;
     }
 
-    setActivityForm((prev) => ({
+    if (name === "typeLabel") {
+      const nextSubs = getSubTypes(modelForm.domain, value);
+      setModelForm((prev) => ({
+        ...prev,
+        typeLabel: value,
+        subTypeLabel: nextSubs[0] || "",
+      }));
+      return;
+    }
+
+    setModelForm((prev) => ({
       ...prev,
       [name]: name === "defaultDuration" ? (value === "" ? "" : Number(value)) : value,
     }));
   }
 
-  function getActivityById(id) {
-    return activities.find((a) => a.id === id) || null;
-  }
-
-  function resolveEventCategory(evt) {
-    if (evt.type === "activite" && evt.activityId) {
-      const activity = getActivityById(evt.activityId);
-      return evt.category || activity?.category || "Autre";
-    }
-    return evt.category || "Autre";
-  }
-
-  function resolveEventSubcategory(evt) {
-    if (evt.type === "activite" && evt.activityId) {
-      const activity = getActivityById(evt.activityId);
-      return evt.subcategory || activity?.subcategory || "Autre";
-    }
-    return evt.subcategory || "Autre";
-  }
-
   function validateEvent(payload) {
-    if (!["rdv", "activite"].includes(payload.type)) {
-      return "Le type d'événement est invalide.";
-    }
-    if (!payload.whenDate) return "La date est obligatoire.";
-    if (!payload.whenStart) return "L'heure est obligatoire.";
-    if (!payload.title?.trim()) return "Le titre est obligatoire.";
+    if (!payload.title.trim()) return "Le titre est obligatoire.";
+    if (!payload.domain.trim()) return "Le domaine est obligatoire.";
+    if (!payload.typeLabel.trim()) return "Le type est obligatoire.";
+    if (!payload.date) return "La date est obligatoire.";
+    if (!payload.startTime) return "L'heure est obligatoire.";
     if (Number(payload.duration || 0) <= 0) return "La durée doit être supérieure à 0.";
     if (Number(payload.travelBefore || 0) < 0) return "Le trajet avant doit être positif.";
     if (Number(payload.travelAfter || 0) < 0) return "Le trajet après doit être positif.";
@@ -343,10 +403,10 @@ function App() {
     return null;
   }
 
-  function validateActivity(payload) {
-    if (!payload.name?.trim()) return "Le nom de l'activité est obligatoire.";
-    if (!payload.category?.trim()) return "La catégorie est obligatoire.";
-    if (!payload.subcategory?.trim()) return "Le sous-type / sous-catégorie est obligatoire.";
+  function validateModel(payload) {
+    if (!payload.domain.trim()) return "Le domaine est obligatoire.";
+    if (!payload.typeLabel.trim()) return "Le type est obligatoire.";
+    if (!payload.label.trim()) return "Le libellé du modèle est obligatoire.";
     if (Number(payload.defaultDuration || 0) <= 0) {
       return "La durée par défaut doit être supérieure à 0.";
     }
@@ -372,9 +432,17 @@ function App() {
     return d;
   }
 
-  function buildOccurrencesFromPayload(payload, baseId = null) {
-    const recurrenceGroupId = payload.recurrence.enabled ? uid("rec") : null;
-    const firstStart = combineDateTime(payload.whenDate, payload.whenStart);
+  function buildOccurrencesFromPayload(payload, options = {}) {
+    const {
+      existingSeriesGroupId = null,
+      preserveIds = false,
+      seriesEvents = [],
+    } = options;
+
+    const firstStart = combineDateTime(payload.date, payload.startTime);
+    const seriesGroupId = payload.recurrence.enabled
+      ? existingSeriesGroupId || uid("series")
+      : null;
 
     const maxCount = payload.recurrence.enabled
       ? Math.max(1, Number(payload.recurrence.count || 0) || 999)
@@ -391,12 +459,16 @@ function App() {
     while (index < maxCount) {
       if (untilDate && cursor > untilDate) break;
 
+      const existingSeriesEvent = preserveIds
+        ? seriesEvents.find((evt) => Number(evt.seriesIndex || 0) === index)
+        : null;
+
       list.push({
-        id: baseId && index === 0 ? baseId : uid("evt"),
-        createdAt: new Date().toISOString(),
+        id: existingSeriesEvent?.id || uid("evt"),
+        createdAt: existingSeriesEvent?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        recurrenceGroupId,
-        recurrenceIndex: index,
+        seriesGroupId,
+        seriesIndex: index,
         recurrenceRule: payload.recurrence.enabled
           ? {
               enabled: true,
@@ -412,18 +484,18 @@ function App() {
               count: 1,
               until: "",
             },
-        type: payload.type,
         title: payload.title,
-        activityId: payload.activityId || "",
-        category: payload.category,
-        subcategory: payload.subcategory,
-        who: payload.who,
-        where: payload.where,
-        whenDate: formatDateInputValue(cursor),
-        whenStart: payload.whenStart,
+        modelId: payload.modelId || "",
+        domain: payload.domain,
+        typeLabel: payload.typeLabel,
+        subTypeLabel: payload.subTypeLabel,
+        withWho: payload.withWho,
+        place: payload.place,
+        date: formatDateInputValue(cursor),
+        startTime: payload.startTime,
         duration: Number(payload.duration || 0),
-        how: payload.how,
-        why: payload.why,
+        channel: payload.channel,
+        objective: payload.objective,
         notes: payload.notes,
         status: payload.status,
         travelBefore: Number(payload.travelBefore || 0),
@@ -443,42 +515,38 @@ function App() {
     return list;
   }
 
-  function onActivitySelected(activityId) {
-    const activity = getActivityById(activityId);
+  function applyModelToEvent(modelId) {
+    const model = getModelById(modelId);
+    if (!model) return;
 
     setEventForm((prev) => ({
       ...prev,
-      activityId,
-      title: activity?.name || "",
-      category: activity?.category || prev.category,
-      subcategory: activity?.subcategory || prev.subcategory,
-      duration: activity?.defaultDuration || prev.duration,
-      notes: prev.notes || activity?.notes || "",
+      modelId,
+      title: model.label || prev.title,
+      domain: model.domain || prev.domain,
+      typeLabel: model.typeLabel || prev.typeLabel,
+      subTypeLabel: model.subTypeLabel || prev.subTypeLabel,
+      duration: model.defaultDuration || prev.duration,
+      notes: prev.notes || model.notes || "",
     }));
   }
 
-  function addOrUpdateEvent() {
-    const resolvedTitle = (() => {
-      if (eventForm.type === "activite") {
-        const activity = getActivityById(eventForm.activityId);
-        return (activity?.name || eventForm.title || "").trim();
-      }
-      return (eventForm.title || "").trim();
-    })();
+  function saveEvent() {
+    const chain = normalizeChain(eventForm.domain, eventForm.typeLabel, eventForm.subTypeLabel);
 
     const payload = {
-      type: String(eventForm.type || "rdv"),
-      title: resolvedTitle,
-      activityId: String(eventForm.activityId || ""),
-      category: String(eventForm.category || "Autre").trim(),
-      subcategory: String(eventForm.subcategory || "Autre").trim(),
-      who: String(eventForm.who || "").trim(),
-      where: String(eventForm.where || "").trim(),
-      whenDate: String(eventForm.whenDate || ""),
-      whenStart: String(eventForm.whenStart || ""),
+      title: String(eventForm.title || "").trim(),
+      modelId: String(eventForm.modelId || ""),
+      domain: chain.domain,
+      typeLabel: chain.typeLabel,
+      subTypeLabel: chain.subTypeLabel,
+      withWho: String(eventForm.withWho || "").trim(),
+      place: String(eventForm.place || "").trim(),
+      date: String(eventForm.date || ""),
+      startTime: String(eventForm.startTime || ""),
       duration: Number(eventForm.duration || 0),
-      how: String(eventForm.how || "").trim(),
-      why: String(eventForm.why || "").trim(),
+      channel: String(eventForm.channel || "").trim(),
+      objective: String(eventForm.objective || "").trim(),
       notes: String(eventForm.notes || "").trim(),
       status: String(eventForm.status || "prévu"),
       travelBefore: Number(eventForm.travelBefore || 0),
@@ -498,48 +566,161 @@ function App() {
       return;
     }
 
-    ensureCategoryExists(payload.category);
-    ensureSubcategoryExists(payload.category, payload.subcategory);
-
-    if (editingEventId) {
-      setEvents(
-        events.map((evt) =>
-          evt.id === editingEventId
-            ? {
-                ...evt,
-                ...buildOccurrencesFromPayload(
-                  { ...payload, recurrence: { ...payload.recurrence, enabled: false } },
-                  editingEventId
-                )[0],
-                updatedAt: new Date().toISOString(),
-              }
-            : evt
-        )
-      );
-    } else {
-      const created = buildOccurrencesFromPayload(payload);
-      setEvents([...events, ...created]);
+    ensureDomainExists(payload.domain);
+    ensureTypeExists(payload.domain, payload.typeLabel);
+    if (payload.subTypeLabel) {
+      ensureSubTypeExists(payload.domain, payload.typeLabel, payload.subTypeLabel);
     }
 
+    if (editingSeriesGroupId) {
+      const seriesEvents = events
+        .filter((evt) => evt.seriesGroupId === editingSeriesGroupId)
+        .sort((a, b) => Number(a.seriesIndex || 0) - Number(b.seriesIndex || 0));
+
+      const rebuiltSeries = buildOccurrencesFromPayload(payload, {
+        existingSeriesGroupId: editingSeriesGroupId,
+        preserveIds: true,
+        seriesEvents,
+      });
+
+      const nextEvents = [
+        ...events.filter((evt) => evt.seriesGroupId !== editingSeriesGroupId),
+        ...rebuiltSeries,
+      ].sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b));
+
+      setEvents(nextEvents);
+      resetEventForm();
+      setActiveMenu("agenda");
+      return;
+    }
+
+    if (editingEventId) {
+      const nextEvents = events.map((evt) =>
+        evt.id === editingEventId
+          ? {
+              ...evt,
+              title: payload.title,
+              modelId: payload.modelId,
+              domain: payload.domain,
+              typeLabel: payload.typeLabel,
+              subTypeLabel: payload.subTypeLabel,
+              withWho: payload.withWho,
+              place: payload.place,
+              date: payload.date,
+              startTime: payload.startTime,
+              duration: payload.duration,
+              channel: payload.channel,
+              objective: payload.objective,
+              notes: payload.notes,
+              status: payload.status,
+              travelBefore: payload.travelBefore,
+              travelAfter: payload.travelAfter,
+              updatedAt: new Date().toISOString(),
+            }
+          : evt
+      );
+      setEvents(nextEvents);
+      resetEventForm();
+      setActiveMenu("agenda");
+      return;
+    }
+
+    const created = buildOccurrencesFromPayload(payload);
+    setEvents([...events, ...created].sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b)));
     resetEventForm();
     setActiveMenu("agenda");
   }
 
-  function editEvent(evt) {
+  function saveModel() {
+    const chain = normalizeChain(modelForm.domain, modelForm.typeLabel, modelForm.subTypeLabel);
+
+    const payload = {
+      id: modelForm.id || uid("model"),
+      label: String(modelForm.label || "").trim(),
+      domain: chain.domain,
+      typeLabel: chain.typeLabel,
+      subTypeLabel: chain.subTypeLabel,
+      defaultDuration: Number(modelForm.defaultDuration || 0),
+      notes: String(modelForm.notes || "").trim(),
+      createdAt: editingModelId ? undefined : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const error = validateModel(payload);
+    if (error) {
+      alert(error);
+      return;
+    }
+
+    ensureDomainExists(payload.domain);
+    ensureTypeExists(payload.domain, payload.typeLabel);
+    if (payload.subTypeLabel) {
+      ensureSubTypeExists(payload.domain, payload.typeLabel, payload.subTypeLabel);
+    }
+
+    if (editingModelId) {
+      setModels(
+        models.map((model) =>
+          model.id === editingModelId
+            ? {
+                ...model,
+                label: payload.label,
+                domain: payload.domain,
+                typeLabel: payload.typeLabel,
+                subTypeLabel: payload.subTypeLabel,
+                defaultDuration: payload.defaultDuration,
+                notes: payload.notes,
+                updatedAt: payload.updatedAt,
+              }
+            : model
+        )
+      );
+    } else {
+      setModels([...models, payload]);
+    }
+
+    resetModelForm();
+    setActiveMenu("models");
+  }
+
+  function editModel(model) {
+    setEditingModelId(model.id);
+    setModelForm({
+      id: model.id,
+      label: model.label || "",
+      domain: model.domain || getDomains()[0] || "",
+      typeLabel: model.typeLabel || getTypes(model.domain)[0] || "",
+      subTypeLabel: model.subTypeLabel || "",
+      defaultDuration: Number(model.defaultDuration ?? 60),
+      notes: model.notes || "",
+    });
+    setActiveMenu("models");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function deleteModel(modelId) {
+    setModels(models.filter((m) => m.id !== modelId));
+    if (editingModelId === modelId) {
+      resetModelForm();
+    }
+  }
+
+  function editOccurrence(evt) {
     setEditingEventId(evt.id);
+    setEditingSeriesGroupId(null);
     setEventForm({
-      type: evt.type || "rdv",
       title: evt.title || "",
-      activityId: evt.activityId || "",
-      category: evt.category || "Autre",
-      subcategory: evt.subcategory || "Autre",
-      who: evt.who || "",
-      where: evt.where || "",
-      whenDate: evt.whenDate || "",
-      whenStart: evt.whenStart || "",
+      domain: evt.domain || getDomains()[0] || "",
+      typeLabel: evt.typeLabel || "",
+      subTypeLabel: evt.subTypeLabel || "",
+      modelId: evt.modelId || "",
+      withWho: evt.withWho || "",
+      place: evt.place || "",
+      date: evt.date || "",
+      startTime: evt.startTime || "",
       duration: Number(evt.duration ?? 60),
-      how: evt.how || "",
-      why: evt.why || "",
+      channel: evt.channel || "",
+      objective: evt.objective || "",
       notes: evt.notes || "",
       status: evt.status || "prévu",
       travelBefore: Number(evt.travelBefore ?? 0),
@@ -552,124 +733,116 @@ function App() {
         until: "",
       },
     });
-
     setActiveMenu("event");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteEvent(id) {
-    setEvents(events.filter((evt) => evt.id !== id));
-    if (editingEventId === id) resetEventForm();
-  }
-
-  function deleteRecurrenceGroup(groupId) {
-    if (!groupId) return;
-    setEvents(events.filter((evt) => evt.recurrenceGroupId !== groupId));
-
-    if (editingEventId) {
-      const current = events.find((evt) => evt.id === editingEventId);
-      if (current?.recurrenceGroupId === groupId) {
-        resetEventForm();
-      }
-    }
-  }
-
-  function saveActivity() {
-    const payload = {
-      id: activityForm.id || uid("act"),
-      name: String(activityForm.name || "").trim(),
-      category: String(activityForm.category || "").trim(),
-      subcategory: String(activityForm.subcategory || "").trim(),
-      defaultDuration: Number(activityForm.defaultDuration || 0),
-      notes: String(activityForm.notes || "").trim(),
-      createdAt: activityForm.id ? undefined : new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const error = validateActivity(payload);
-    if (error) {
-      alert(error);
+  function editSeries(evt) {
+    if (!evt.seriesGroupId) {
+      editOccurrence(evt);
       return;
     }
 
-    ensureCategoryExists(payload.category);
-    ensureSubcategoryExists(payload.category, payload.subcategory);
+    const seriesEvents = events
+      .filter((item) => item.seriesGroupId === evt.seriesGroupId)
+      .sort((a, b) => Number(a.seriesIndex || 0) - Number(b.seriesIndex || 0));
 
-    if (editingActivityId) {
-      setActivities(
-        activities.map((activity) =>
-          activity.id === editingActivityId
-            ? {
-                ...activity,
-                name: payload.name,
-                category: payload.category,
-                subcategory: payload.subcategory,
-                defaultDuration: payload.defaultDuration,
-                notes: payload.notes,
-                updatedAt: payload.updatedAt,
-              }
-            : activity
-        )
-      );
+    const first = seriesEvents[0] || evt;
+    const rule = first.recurrenceRule || {
+      enabled: true,
+      frequency: "weekly",
+      interval: 1,
+      count: seriesEvents.length,
+      until: "",
+    };
 
-      setEvents(
-        events.map((evt) =>
-          evt.activityId === editingActivityId
-            ? {
-                ...evt,
-                title: evt.type === "activite" ? payload.name : evt.title,
-                category: payload.category,
-                subcategory: payload.subcategory,
-              }
-            : evt
-        )
-      );
-    } else {
-      setActivities([...activities, payload]);
-    }
-
-    resetActivityForm();
-    setActiveMenu("activities");
-  }
-
-  function editActivity(activity) {
-    setEditingActivityId(activity.id);
-    setActivityForm({
-      id: activity.id,
-      name: activity.name || "",
-      category: activity.category || "Autre",
-      subcategory: activity.subcategory || "Autre",
-      defaultDuration: Number(activity.defaultDuration ?? 60),
-      notes: activity.notes || "",
+    setEditingEventId(null);
+    setEditingSeriesGroupId(evt.seriesGroupId);
+    setEventForm({
+      title: first.title || "",
+      domain: first.domain || getDomains()[0] || "",
+      typeLabel: first.typeLabel || "",
+      subTypeLabel: first.subTypeLabel || "",
+      modelId: first.modelId || "",
+      withWho: first.withWho || "",
+      place: first.place || "",
+      date: first.date || "",
+      startTime: first.startTime || "",
+      duration: Number(first.duration ?? 60),
+      channel: first.channel || "",
+      objective: first.objective || "",
+      notes: first.notes || "",
+      status: first.status || "prévu",
+      travelBefore: Number(first.travelBefore ?? 0),
+      travelAfter: Number(first.travelAfter ?? 0),
+      recurrence: {
+        enabled: Boolean(rule.enabled),
+        frequency: String(rule.frequency || "weekly"),
+        interval: Number(rule.interval || 1),
+        count: Number(rule.count || seriesEvents.length || 1),
+        until: String(rule.until || ""),
+      },
     });
-    setActiveMenu("activities");
+    setActiveMenu("event");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function removeActivity(activityId) {
-    const linked = events.some((evt) => evt.activityId === activityId);
-    if (linked) {
-      const ok = window.confirm(
-        "Cette activité est utilisée dans des événements. Elle sera supprimée du catalogue, mais les événements déjà créés seront conservés."
-      );
-      if (!ok) return;
-    }
-
-    setActivities(activities.filter((a) => a.id !== activityId));
-
-    if (editingActivityId === activityId) {
-      resetActivityForm();
+  function deleteOccurrence(id) {
+    setEvents(events.filter((evt) => evt.id !== id));
+    if (editingEventId === id) {
+      resetEventForm();
     }
   }
 
+  function deleteSeries(seriesGroupId) {
+    if (!seriesGroupId) return;
+    setEvents(events.filter((evt) => evt.seriesGroupId !== seriesGroupId));
+
+    if (editingSeriesGroupId === seriesGroupId) {
+      resetEventForm();
+    }
+  }
+
+  function duplicateEvent(evt) {
+    setEventForm({
+      title: evt.title || "",
+      domain: evt.domain || getDomains()[0] || "",
+      typeLabel: evt.typeLabel || "",
+      subTypeLabel: evt.subTypeLabel || "",
+      modelId: evt.modelId || "",
+      withWho: evt.withWho || "",
+      place: evt.place || "",
+      date: evt.date || "",
+      startTime: evt.startTime || "",
+      duration: Number(evt.duration ?? 60),
+      channel: evt.channel || "",
+      objective: evt.objective || "",
+      notes: evt.notes || "",
+      status: "prévu",
+      travelBefore: Number(evt.travelBefore ?? 0),
+      travelAfter: Number(evt.travelAfter ?? 0),
+      recurrence: {
+        enabled: false,
+        frequency: "weekly",
+        interval: 1,
+        count: 1,
+        until: "",
+      },
+    });
+    setEditingEventId(null);
+    setEditingSeriesGroupId(null);
+    setActiveMenu("event");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function exportData() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
+    const blob = new Blob([JSON.stringify(store, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "agenda-avf-r2c-v3.json";
+    link.download = "agenda-v5.json";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -683,66 +856,20 @@ function App() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result));
-
-        const importedEvents = Array.isArray(parsed.events)
-          ? parsed.events.map((item, index) => ({
-              id: item.id ?? `import-evt-${Date.now()}-${index}`,
-              createdAt: item.createdAt ?? new Date().toISOString(),
-              updatedAt: item.updatedAt ?? new Date().toISOString(),
-              recurrenceGroupId: item.recurrenceGroupId ?? null,
-              recurrenceIndex: Number(item.recurrenceIndex ?? 0),
-              recurrenceRule: item.recurrenceRule ?? {
-                enabled: false,
-                frequency: "weekly",
-                interval: 1,
-                count: 1,
-                until: "",
-              },
-              type: item.type === "activite" ? "activite" : "rdv",
-              title: String(item.title ?? ""),
-              activityId: String(item.activityId ?? ""),
-              category: String(item.category ?? "Autre"),
-              subcategory: String(item.subcategory ?? "Autre"),
-              who: String(item.who ?? ""),
-              where: String(item.where ?? ""),
-              whenDate: String(item.whenDate ?? ""),
-              whenStart: String(item.whenStart ?? ""),
-              duration: Number(item.duration ?? 60),
-              how: String(item.how ?? ""),
-              why: String(item.why ?? ""),
-              notes: String(item.notes ?? ""),
-              status: String(item.status ?? "prévu"),
-              travelBefore: Number(item.travelBefore ?? 0),
-              travelAfter: Number(item.travelAfter ?? 0),
-            }))
-          : [];
-
-        const importedActivities = Array.isArray(parsed.activities)
-          ? parsed.activities.map((item, index) => ({
-              id: item.id ?? `import-act-${Date.now()}-${index}`,
-              name: String(item.name ?? ""),
-              category: String(item.category ?? "Autre"),
-              subcategory: String(item.subcategory ?? "Autre"),
-              defaultDuration: Number(item.defaultDuration ?? 60),
-              notes: String(item.notes ?? ""),
-              createdAt: item.createdAt ?? new Date().toISOString(),
-              updatedAt: item.updatedAt ?? new Date().toISOString(),
-            }))
-          : DEFAULT_ACTIVITIES;
-
-        const importedCategoryOptions =
-          parsed.categoryOptions && typeof parsed.categoryOptions === "object"
-            ? parsed.categoryOptions
-            : DEFAULT_CATEGORY_OPTIONS;
-
-        setData({
-          events: importedEvents,
-          activities: importedActivities.length ? importedActivities : DEFAULT_ACTIVITIES,
-          categoryOptions: importedCategoryOptions,
-        });
-
+        const imported = {
+          events: Array.isArray(parsed.events) ? parsed.events : [],
+          structure:
+            parsed.structure && typeof parsed.structure === "object"
+              ? parsed.structure
+              : DEFAULT_STRUCTURE,
+          models:
+            Array.isArray(parsed.models) && parsed.models.length > 0
+              ? parsed.models
+              : DEFAULT_MODELS,
+        };
+        setStore(imported);
         resetEventForm();
-        resetActivityForm();
+        resetModelForm();
         alert("Import réussi.");
       } catch {
         alert("Fichier JSON invalide.");
@@ -755,7 +882,7 @@ function App() {
   }
 
   function getDateTimeFromEvent(evt) {
-    return new Date(`${evt.whenDate}T${evt.whenStart}:00`);
+    return new Date(`${evt.date}T${evt.startTime}:00`);
   }
 
   function getEffectiveStart(evt) {
@@ -780,7 +907,7 @@ function App() {
 
     return sourceEvents.some((other) => {
       if (other.id === current.id) return false;
-      if (other.whenDate !== current.whenDate) return false;
+      if (other.date !== current.date) return false;
       if (other.status === "annulé" || current.status === "annulé") return false;
 
       const otherStart = getEffectiveStart(other);
@@ -870,8 +997,8 @@ function App() {
         ((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
       );
     return {
-      year: d.getFullYear(),
-      week: weekNumber,
+        year: d.getFullYear(),
+        week: weekNumber,
     };
   }
 
@@ -899,7 +1026,7 @@ function App() {
   }
 
   function isInCurrentView(evt) {
-    const evtDate = new Date(`${evt.whenDate}T12:00:00`);
+    const evtDate = new Date(`${evt.date}T12:00:00`);
     if (Number.isNaN(evtDate.getTime())) return false;
 
     if (viewMode === "jour") {
@@ -995,18 +1122,10 @@ function App() {
   function getStatsRange() {
     if (statsFilter.mode === "current") {
       if (viewMode === "jour") {
-        return {
-          start: startOfDay(currentDate),
-          end: endOfDay(currentDate),
-          label: "Période affichée : jour",
-        };
+        return { start: startOfDay(currentDate), end: endOfDay(currentDate), label: "Période affichée : jour" };
       }
       if (viewMode === "semaine") {
-        return {
-          start: getStartOfWeek(currentDate),
-          end: getEndOfWeek(currentDate),
-          label: "Période affichée : semaine",
-        };
+        return { start: getStartOfWeek(currentDate), end: getEndOfWeek(currentDate), label: "Période affichée : semaine" };
       }
       if (viewMode === "mois") {
         return {
@@ -1023,11 +1142,7 @@ function App() {
     }
 
     if (statsFilter.mode === "week") {
-      return {
-        start: getStartOfWeek(new Date()),
-        end: getEndOfWeek(new Date()),
-        label: "Cette semaine",
-      };
+      return { start: getStartOfWeek(new Date()), end: getEndOfWeek(new Date()), label: "Cette semaine" };
     }
 
     if (statsFilter.mode === "month") {
@@ -1049,18 +1164,9 @@ function App() {
     }
 
     if (statsFilter.mode === "custom") {
-      const start = statsFilter.customStart
-        ? new Date(`${statsFilter.customStart}T00:00:00`)
-        : null;
-      const end = statsFilter.customEnd
-        ? new Date(`${statsFilter.customEnd}T23:59:59`)
-        : null;
-
-      return {
-        start,
-        end,
-        label: "Période personnalisée",
-      };
+      const start = statsFilter.customStart ? new Date(`${statsFilter.customStart}T00:00:00`) : null;
+      const end = statsFilter.customEnd ? new Date(`${statsFilter.customEnd}T23:59:59`) : null;
+      return { start, end, label: "Période personnalisée" };
     }
 
     return { start: null, end: null, label: "Toutes dates" };
@@ -1069,7 +1175,6 @@ function App() {
   function isEventInStatsRange(evt) {
     const { start, end } = getStatsRange();
     const evtDate = getDateTimeFromEvent(evt);
-
     if (start && evtDate < start) return false;
     if (end && evtDate > end) return false;
     return true;
@@ -1085,10 +1190,12 @@ function App() {
 
   function formatRangeHour(start, end) {
     const pad = (n) => String(n).padStart(2, "0");
-    return `${pad(start.getHours())}:${pad(start.getMinutes())} → ${pad(end.getHours())}:${pad(
-      end.getMinutes()
-    )}`;
+    return `${pad(start.getHours())}:${pad(start.getMinutes())} → ${pad(end.getHours())}:${pad(end.getMinutes())}`;
   }
+
+  const currentTypeOptionsForFilter = domainFilter !== "tous" ? getTypes(domainFilter) : [];
+  const currentSubTypeOptionsForFilter =
+    domainFilter !== "tous" && typeFilter !== "tous" ? getSubTypes(domainFilter, typeFilter) : [];
 
   const filteredAgendaEvents = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1098,82 +1205,62 @@ function App() {
       .filter((evt) => {
         const haystack = [
           evt.title,
-          evt.who,
-          evt.where,
-          evt.how,
-          evt.why,
+          evt.domain,
+          evt.typeLabel,
+          evt.subTypeLabel,
+          evt.withWho,
+          evt.place,
+          evt.channel,
+          evt.objective,
           evt.notes,
-          resolveEventCategory(evt),
-          resolveEventSubcategory(evt),
-          evt.type,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-
         return !q || haystack.includes(q);
       })
       .filter((evt) => statusFilter === "tous" || evt.status === statusFilter)
-      .filter((evt) => categoryFilter === "toutes" || resolveEventCategory(evt) === categoryFilter)
-      .filter(
-        (evt) =>
-          subcategoryFilter === "toutes" || resolveEventSubcategory(evt) === subcategoryFilter
-      )
-      .filter((evt) => typeFilter === "tous" || evt.type === typeFilter)
+      .filter((evt) => domainFilter === "tous" || evt.domain === domainFilter)
+      .filter((evt) => typeFilter === "tous" || evt.typeLabel === typeFilter)
+      .filter((evt) => subTypeFilter === "tous" || evt.subTypeLabel === subTypeFilter)
       .filter((evt) => !showOnlyConflicts || hasConflict(evt))
       .sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b));
-  }, [
-    events,
-    currentDate,
-    viewMode,
-    search,
-    statusFilter,
-    categoryFilter,
-    subcategoryFilter,
-    typeFilter,
-    showOnlyConflicts,
-  ]);
+  }, [events, currentDate, viewMode, search, statusFilter, domainFilter, typeFilter, subTypeFilter, showOnlyConflicts]);
 
   const statsEvents = useMemo(() => {
     return [...events]
       .filter((evt) => isEventInStatsRange(evt))
       .filter((evt) => statusFilter === "tous" || evt.status === statusFilter)
-      .filter((evt) => categoryFilter === "toutes" || resolveEventCategory(evt) === categoryFilter)
-      .filter(
-        (evt) =>
-          subcategoryFilter === "toutes" || resolveEventSubcategory(evt) === subcategoryFilter
-      )
-      .filter((evt) => typeFilter === "tous" || evt.type === typeFilter)
+      .filter((evt) => domainFilter === "tous" || evt.domain === domainFilter)
+      .filter((evt) => typeFilter === "tous" || evt.typeLabel === typeFilter)
+      .filter((evt) => subTypeFilter === "tous" || evt.subTypeLabel === subTypeFilter)
       .sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b));
-  }, [events, statsFilter, statusFilter, categoryFilter, subcategoryFilter, typeFilter, currentDate, viewMode]);
+  }, [events, statsFilter, statusFilter, domainFilter, typeFilter, subTypeFilter, currentDate, viewMode]);
 
   const stats = useMemo(() => {
     const count = statsEvents.length;
-    const rdvCount = statsEvents.filter((e) => e.type === "rdv").length;
-    const activityCount = statsEvents.filter((e) => e.type === "activite").length;
     const duration = statsEvents.reduce((sum, e) => sum + Number(e.duration || 0), 0);
-    const travel = statsEvents.reduce(
-      (sum, e) => sum + Number(e.travelBefore || 0) + Number(e.travelAfter || 0),
-      0
-    );
+    const travel = statsEvents.reduce((sum, e) => sum + Number(e.travelBefore || 0) + Number(e.travelAfter || 0), 0);
     const mobilized = statsEvents.reduce((sum, e) => sum + getMobilizedMinutes(e), 0);
     const conflicts = statsEvents.filter((e) => hasConflict(e)).length;
     const confirmed = statsEvents.filter((e) => e.status === "confirmé").length;
     const completed = statsEvents.filter((e) => e.status === "terminé").length;
     const cancelled = statsEvents.filter((e) => e.status === "annulé").length;
-    const uniquePeople = new Set(
-      statsEvents.map((e) => String(e.who || "").trim()).filter(Boolean)
-    ).size;
+    const uniquePeople = new Set(statsEvents.map((e) => String(e.withWho || "").trim()).filter(Boolean)).size;
 
-    const byCategory = statsEvents.reduce((acc, e) => {
-      const cat = resolveEventCategory(e);
-      acc[cat] = (acc[cat] || 0) + 1;
+    const byDomain = statsEvents.reduce((acc, e) => {
+      acc[e.domain] = (acc[e.domain] || 0) + 1;
       return acc;
     }, {});
 
-    const bySubcategory = statsEvents.reduce((acc, e) => {
-      const sub = resolveEventSubcategory(e);
-      acc[sub] = (acc[sub] || 0) + 1;
+    const byType = statsEvents.reduce((acc, e) => {
+      acc[e.typeLabel] = (acc[e.typeLabel] || 0) + 1;
+      return acc;
+    }, {});
+
+    const bySubType = statsEvents.reduce((acc, e) => {
+      const key = e.subTypeLabel || "Sans sous-type";
+      acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
 
@@ -1181,13 +1268,12 @@ function App() {
     const completionRate = activeBase > 0 ? Math.round((completed / activeBase) * 100) : 0;
     const confirmationRate = activeBase > 0 ? Math.round((confirmed / activeBase) * 100) : 0;
 
-    const topCategory = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0] || null;
-    const topSubcategory = Object.entries(bySubcategory).sort((a, b) => b[1] - a[1])[0] || null;
+    const topDomain = Object.entries(byDomain).sort((a, b) => b[1] - a[1])[0] || null;
+    const topType = Object.entries(byType).sort((a, b) => b[1] - a[1])[0] || null;
+    const topSubType = Object.entries(bySubType).sort((a, b) => b[1] - a[1])[0] || null;
 
     return {
       count,
-      rdvCount,
-      activityCount,
       duration,
       travel,
       mobilized,
@@ -1198,53 +1284,18 @@ function App() {
       uniquePeople,
       completionRate,
       confirmationRate,
-      topCategory: topCategory ? `${topCategory[0]} (${topCategory[1]})` : "—",
-      topSubcategory: topSubcategory ? `${topSubcategory[0]} (${topSubcategory[1]})` : "—",
-      byCategory,
-      bySubcategory,
+      topDomain: topDomain ? `${topDomain[0]} (${topDomain[1]})` : "—",
+      topType: topType ? `${topType[0]} (${topType[1]})` : "—",
+      topSubType: topSubType ? `${topSubType[0]} (${topSubType[1]})` : "—",
+      byDomain,
+      byType,
+      bySubType,
     };
   }, [statsEvents]);
 
   const timelineEvents = useMemo(() => {
     return [...filteredAgendaEvents].sort((a, b) => getEffectiveStart(a) - getEffectiveStart(b));
   }, [filteredAgendaEvents]);
-
-  const currentSubcategoriesForFilter =
-    categoryFilter !== "toutes" ? getSubcategories(categoryFilter) : [];
-
-  const statusColors = {
-    prévu: {
-      background: "#fff7ed",
-      color: "#c2410c",
-      border: "1px solid #fdba74",
-    },
-    confirmé: {
-      background: "#ecfdf5",
-      color: "#047857",
-      border: "1px solid #6ee7b7",
-    },
-    terminé: {
-      background: "#eff6ff",
-      color: "#1d4ed8",
-      border: "1px solid #93c5fd",
-    },
-    annulé: {
-      background: "#fef2f2",
-      color: "#b91c1c",
-      border: "1px solid #fca5a5",
-    },
-  };
-
-  const typeColors = {
-    rdv: {
-      background: "#eef2ff",
-      color: "#4338ca",
-    },
-    activite: {
-      background: "#f0fdf4",
-      color: "#166534",
-    },
-  };
 
   const styles = {
     page: {
@@ -1255,10 +1306,7 @@ function App() {
         'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       color: "#0f172a",
     },
-    wrapper: {
-      maxWidth: 1440,
-      margin: "0 auto",
-    },
+    wrapper: { maxWidth: 1500, margin: "0 auto" },
     hero: {
       background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
       borderRadius: 24,
@@ -1267,11 +1315,7 @@ function App() {
       boxShadow: "0 18px 45px rgba(37, 99, 235, 0.25)",
       marginBottom: 18,
     },
-    heroTitle: {
-      margin: 0,
-      fontSize: 32,
-      fontWeight: 800,
-    },
+    heroTitle: { margin: 0, fontSize: 32, fontWeight: 800 },
     heroText: {
       marginTop: 8,
       marginBottom: 0,
@@ -1301,18 +1345,8 @@ function App() {
       border: "1px solid rgba(255,255,255,0.7)",
       marginBottom: 18,
     },
-    sectionTitle: {
-      margin: 0,
-      marginBottom: 6,
-      fontSize: 22,
-      fontWeight: 800,
-    },
-    sectionText: {
-      marginTop: 0,
-      marginBottom: 16,
-      color: "#64748b",
-      fontSize: 14,
-    },
+    sectionTitle: { margin: 0, marginBottom: 6, fontSize: 22, fontWeight: 800 },
+    sectionText: { marginTop: 0, marginBottom: 16, color: "#64748b", fontSize: 14 },
     grid: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
@@ -1340,11 +1374,7 @@ function App() {
       boxSizing: "border-box",
       resize: "vertical",
     },
-    label: {
-      fontSize: 13,
-      fontWeight: 700,
-      color: "#334155",
-    },
+    label: { fontSize: 13, fontWeight: 700, color: "#334155" },
     buttonPrimary: {
       padding: "12px 16px",
       borderRadius: 14,
@@ -1400,7 +1430,7 @@ function App() {
       border: "1px solid #e2e8f0",
     },
     statValue: {
-      fontSize: 25,
+      fontSize: 24,
       fontWeight: 800,
       marginTop: 6,
     },
@@ -1424,6 +1454,7 @@ function App() {
       background: "#ffffff",
       border: "1px solid #e2e8f0",
       marginBottom: 14,
+      position: "relative",
     },
     eventHeader: {
       display: "flex",
@@ -1452,15 +1483,8 @@ function App() {
       padding: 12,
       fontSize: 14,
     },
-    subtle: {
-      color: "#64748b",
-      fontSize: 14,
-    },
-    conflict: {
-      color: "#b91c1c",
-      fontWeight: 800,
-      margin: "8px 0",
-    },
+    subtle: { color: "#64748b", fontSize: 14 },
+    conflict: { color: "#b91c1c", fontWeight: 800, margin: "8px 0" },
     pickerWrap: {
       display: "grid",
       gridTemplateColumns: "minmax(220px, 320px)",
@@ -1494,9 +1518,7 @@ function App() {
       borderRadius: 999,
       background: "#2563eb",
     },
-    dayTimelineWrap: {
-      minWidth: 760,
-    },
+    dayTimelineWrap: { minWidth: 760 },
     dayTimelineGrid: {
       position: "relative",
       display: "grid",
@@ -1520,9 +1542,7 @@ function App() {
       minHeight: 1440,
       background: "repeating-linear-gradient(to bottom, #ffffff 0px, #ffffff 59px, #eef2f7 60px)",
     },
-    weekTimelineWrap: {
-      minWidth: 1120,
-    },
+    weekTimelineWrap: { minWidth: 1120 },
     weekHeader: {
       display: "grid",
       gridTemplateColumns: "72px repeat(7, minmax(140px, 1fr))",
@@ -1606,10 +1626,7 @@ function App() {
       flexDirection: "column",
       gap: 8,
     },
-    monthCellMuted: {
-      background: "#f8fafc",
-      color: "#94a3b8",
-    },
+    monthCellMuted: { background: "#f8fafc", color: "#94a3b8" },
     monthCellToday: {
       border: "2px solid #2563eb",
       boxShadow: "0 8px 20px rgba(37,99,235,0.08)",
@@ -1620,10 +1637,7 @@ function App() {
       alignItems: "center",
       gap: 8,
     },
-    monthDayNumber: {
-      fontWeight: 800,
-      fontSize: 14,
-    },
+    monthDayNumber: { fontWeight: 800, fontSize: 14 },
     monthCountBadge: {
       fontSize: 11,
       padding: "4px 8px",
@@ -1672,11 +1686,7 @@ function App() {
       background: "#f1f5f9",
       border: "1px solid #e2e8f0",
     },
-    timelineEmpty: {
-      padding: 18,
-      color: "#64748b",
-      fontSize: 14,
-    },
+    timelineEmpty: { padding: 18, color: "#64748b", fontSize: 14 },
     inlineBadge: {
       display: "inline-flex",
       alignItems: "center",
@@ -1688,15 +1698,44 @@ function App() {
       marginRight: 8,
       marginBottom: 8,
     },
-    listCompact: {
-      display: "grid",
-      gap: 10,
+    listCompact: { display: "grid", gap: 10 },
+    divider: { height: 1, background: "#e2e8f0", margin: "18px 0" },
+    contextButton: {
+      border: "1px solid #cbd5e1",
+      background: "#fff",
+      borderRadius: 12,
+      padding: "8px 12px",
+      cursor: "pointer",
+      fontWeight: 700,
     },
-    divider: {
-      height: 1,
-      background: "#e2e8f0",
-      margin: "18px 0",
+    contextMenu: {
+      position: "fixed",
+      minWidth: 220,
+      background: "#fff",
+      border: "1px solid #e2e8f0",
+      borderRadius: 16,
+      boxShadow: "0 20px 40px rgba(15,23,42,0.18)",
+      padding: 8,
+      zIndex: 9999,
     },
+    contextMenuItem: {
+      width: "100%",
+      textAlign: "left",
+      padding: "10px 12px",
+      border: "none",
+      background: "transparent",
+      borderRadius: 10,
+      cursor: "pointer",
+      fontSize: 14,
+      fontWeight: 600,
+    },
+  };
+
+  const statusColors = {
+    prévu: { background: "#fff7ed", color: "#c2410c", border: "1px solid #fdba74" },
+    confirmé: { background: "#ecfdf5", color: "#047857", border: "1px solid #6ee7b7" },
+    terminé: { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #93c5fd" },
+    annulé: { background: "#fef2f2", color: "#b91c1c", border: "1px solid #fca5a5" },
   };
 
   function getTimelineEventStyle(evt, options = {}) {
@@ -1750,7 +1789,7 @@ function App() {
 
   function renderDayTimeline() {
     const dayEvents = timelineEvents.filter((evt) =>
-      sameDay(new Date(`${evt.whenDate}T12:00:00`), currentDate)
+      sameDay(new Date(`${evt.date}T12:00:00`), currentDate)
     );
 
     return (
@@ -1760,7 +1799,7 @@ function App() {
             <div style={styles.timeColumn}>{renderHourLabels()}</div>
             <div style={styles.dayCanvas}>
               {dayEvents.length === 0 ? (
-                <div style={styles.timelineEmpty}>Aucun événement sur cette journée.</div>
+                <div style={styles.timelineEmpty}>Aucun élément sur cette journée.</div>
               ) : (
                 dayEvents.map((evt) => {
                   const start = getEffectiveStart(evt);
@@ -1771,9 +1810,10 @@ function App() {
                       <div style={styles.timelineEventTitle}>{evt.title}</div>
                       <div style={styles.timelineEventMeta}>{formatRangeHour(start, end)}</div>
                       <div style={styles.timelineEventMeta}>
-                        {evt.type === "rdv" ? "RDV" : "Activité"} · {resolveEventCategory(evt)} · {resolveEventSubcategory(evt)}
+                        {evt.domain} · {evt.typeLabel}
+                        {evt.subTypeLabel ? ` · ${evt.subTypeLabel}` : ""}
                       </div>
-                      {evt.where ? <div style={styles.timelineEventMeta}>{evt.where}</div> : null}
+                      {evt.place ? <div style={styles.timelineEventMeta}>{evt.place}</div> : null}
                     </div>
                   );
                 })
@@ -1805,10 +1845,9 @@ function App() {
 
           <div style={styles.weekGrid}>
             <div style={styles.weekTimeColumn}>{renderHourLabels()}</div>
-
             {weekDays.map((day) => {
               const dayEvents = timelineEvents.filter((evt) =>
-                sameDay(new Date(`${evt.whenDate}T12:00:00`), day)
+                sameDay(new Date(`${evt.date}T12:00:00`), day)
               );
 
               return (
@@ -1821,8 +1860,11 @@ function App() {
                       <div key={evt.id} style={getTimelineEventStyle(evt)}>
                         <div style={styles.timelineEventTitle}>{evt.title}</div>
                         <div style={styles.timelineEventMeta}>{formatRangeHour(start, end)}</div>
-                        <div style={styles.timelineEventMeta}>{resolveEventSubcategory(evt)}</div>
-                        {evt.who ? <div style={styles.timelineEventMeta}>{evt.who}</div> : null}
+                        <div style={styles.timelineEventMeta}>
+                          {evt.typeLabel}
+                          {evt.subTypeLabel ? ` · ${evt.subTypeLabel}` : ""}
+                        </div>
+                        {evt.withWho ? <div style={styles.timelineEventMeta}>{evt.withWho}</div> : null}
                       </div>
                     );
                   })}
@@ -1859,7 +1901,7 @@ function App() {
         <div style={styles.monthGrid}>
           {days.map((day) => {
             const dayEvents = timelineEvents.filter((evt) =>
-              sameDay(new Date(`${evt.whenDate}T12:00:00`), day)
+              sameDay(new Date(`${evt.date}T12:00:00`), day)
             );
             const isCurrentMonth = day.getMonth() === currentDate.getMonth();
             const isToday = sameDay(day, new Date());
@@ -1876,19 +1918,18 @@ function App() {
                   setCurrentDate(new Date(day));
                   setViewMode("jour");
                 }}
-                title="Cliquer pour ouvrir la journée"
               >
                 <div style={styles.monthCellHeader}>
                   <div style={styles.monthDayNumber}>{day.getDate()}</div>
                   {dayEvents.length > 0 ? (
-                    <div style={styles.monthCountBadge}>{dayEvents.length} év.</div>
+                    <div style={styles.monthCountBadge}>{dayEvents.length} él.</div>
                   ) : null}
                 </div>
 
                 <div style={{ display: "grid", gap: 6 }}>
                   {dayEvents.slice(0, 3).map((evt) => (
                     <div key={evt.id} style={styles.monthEventMini}>
-                      {evt.whenStart} · {evt.title}
+                      {evt.startTime} · {evt.title}
                     </div>
                   ))}
                   {dayEvents.length > 3 ? (
@@ -1907,18 +1948,17 @@ function App() {
 
   function getMonthCount(year, monthIndex) {
     return timelineEvents.filter((evt) => {
-      const d = new Date(`${evt.whenDate}T12:00:00`);
+      const d = new Date(`${evt.date}T12:00:00`);
       return d.getFullYear() === year && d.getMonth() === monthIndex;
     }).length;
   }
 
   function getMonthMiniDays(year, monthIndex) {
     const lastDay = new Date(year, monthIndex + 1, 0).getDate();
-
     return Array.from({ length: lastDay }, (_, i) => {
       const day = new Date(year, monthIndex, i + 1);
       const count = timelineEvents.filter((evt) =>
-        sameDay(new Date(`${evt.whenDate}T12:00:00`), day)
+        sameDay(new Date(`${evt.date}T12:00:00`), day)
       ).length;
       return { day, count };
     });
@@ -1942,33 +1982,26 @@ function App() {
                 setCurrentDate(monthDate);
                 setViewMode("mois");
               }}
-              title="Cliquer pour ouvrir le mois"
             >
               <div style={styles.yearMonthTitle}>
                 <strong>{monthDate.toLocaleDateString("fr-FR", { month: "long" })}</strong>
-                <span style={styles.monthCountBadge}>{count} év.</span>
+                <span style={styles.monthCountBadge}>{count} él.</span>
               </div>
 
               <div style={styles.yearMiniGrid}>
-                {miniDays.map(({ day, count: dayCount }) => (
+                {miniDays.map(({ day, count }) => (
                   <div
                     key={day.toISOString()}
                     style={{
                       ...styles.yearMiniCell,
                       background:
-                        dayCount === 0
-                          ? "#f1f5f9"
-                          : dayCount === 1
-                            ? "#dbeafe"
-                            : dayCount === 2
-                              ? "#93c5fd"
-                              : "#2563eb",
+                        count === 0 ? "#f1f5f9" : count === 1 ? "#dbeafe" : count === 2 ? "#93c5fd" : "#2563eb",
                       border:
                         sameDay(day, new Date()) && day.getFullYear() === new Date().getFullYear()
                           ? "2px solid #7c3aed"
                           : "1px solid #e2e8f0",
                     }}
-                    title={`${day.toLocaleDateString("fr-FR")} · ${dayCount} événement(s)`}
+                    title={`${day.toLocaleDateString("fr-FR")} · ${count} élément(s)`}
                   />
                 ))}
               </div>
@@ -2053,11 +2086,75 @@ function App() {
     );
   }
 
+  function openContextMenu(e, evt) {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      visible: true,
+      eventId: evt.id,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }
+
+  function getContextEvent() {
+    return events.find((evt) => evt.id === contextMenu.eventId) || null;
+  }
+
+  function renderContextMenu() {
+    if (!contextMenu.visible) return null;
+    const evt = getContextEvent();
+    if (!evt) return null;
+
+    return (
+      <div
+        style={{
+          ...styles.contextMenu,
+          left: Math.min(contextMenu.x, window.innerWidth - 240),
+          top: Math.min(contextMenu.y, window.innerHeight - 260),
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button style={styles.contextMenuItem} onClick={() => editOccurrence(evt)}>
+          Modifier cette occurrence
+        </button>
+        <button style={styles.contextMenuItem} onClick={() => duplicateEvent(evt)}>
+          Dupliquer
+        </button>
+        {evt.seriesGroupId ? (
+          <button style={styles.contextMenuItem} onClick={() => editSeries(evt)}>
+            Modifier toute la série
+          </button>
+        ) : null}
+        <button style={styles.contextMenuItem} onClick={() => deleteOccurrence(evt.id)}>
+          Supprimer cette occurrence
+        </button>
+        {evt.seriesGroupId ? (
+          <button
+            style={{ ...styles.contextMenuItem, color: "#b91c1c" }}
+            onClick={() => deleteSeries(evt.seriesGroupId)}
+          >
+            Supprimer toute la série
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   function renderMenu() {
     const items = [
       { key: "agenda", label: "Agenda" },
-      { key: "event", label: editingEventId ? "Modifier événement" : "Nouvel événement" },
-      { key: "activities", label: "Activités" },
+      {
+        key: "event",
+        label:
+          editingSeriesGroupId
+            ? "Modifier série"
+            : editingEventId
+              ? "Modifier occurrence"
+              : "Nouvel élément",
+      },
+      { key: "models", label: "Modèles" },
+      { key: "structure", label: "Chaînage" },
       { key: "stats", label: "Statistiques" },
     ];
 
@@ -2106,63 +2203,51 @@ function App() {
   }
 
   function renderEventForm() {
-    const eventSubcategories = getSubcategories(eventForm.category);
+    const domains = getDomains();
+    const typeOptions = getTypes(eventForm.domain);
+    const subTypeOptions = getSubTypes(eventForm.domain, eventForm.typeLabel);
 
     return (
       <div style={styles.card}>
         <h2 style={styles.sectionTitle}>
-          {editingEventId ? "Modifier un événement" : "Créer un événement"}
+          {editingSeriesGroupId
+            ? "Modifier toute la série"
+            : editingEventId
+              ? "Modifier cette occurrence"
+              : "Créer un élément"}
         </h2>
         <p style={styles.sectionText}>
-          Parcours optimisé : type, catégorie, sous-type, puis date et durée.
+          Parcours optimisé : domaine, type, sous-type, modèle éventuel, puis planification.
         </p>
 
         <div style={styles.grid}>
           <div>
-            <label style={styles.label}>Type</label>
+            <label style={styles.label}>Domaine</label>
             <select
               style={styles.input}
-              name="type"
-              value={eventForm.type}
+              name="domain"
+              value={eventForm.domain}
               onChange={handleEventChange}
             >
-              <option value="rdv">Rendez-vous</option>
-              <option value="activite">Activité</option>
+              {domains.map((domain) => (
+                <option key={domain} value={domain}>
+                  {domain}
+                </option>
+              ))}
             </select>
           </div>
 
-          {eventForm.type === "activite" ? (
-            <div>
-              <label style={styles.label}>Activité du catalogue</label>
-              <select
-                style={styles.input}
-                name="activityId"
-                value={eventForm.activityId}
-                onChange={(e) => onActivitySelected(e.target.value)}
-              >
-                <option value="">Sélectionner une activité</option>
-                {activities
-                  .filter((a) => !eventForm.category || a.category === eventForm.category)
-                  .map((activity) => (
-                    <option key={activity.id} value={activity.id}>
-                      {activity.name} · {activity.category} · {activity.subcategory}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          ) : null}
-
           <div>
-            <label style={styles.label}>Catégorie</label>
+            <label style={styles.label}>Type</label>
             <select
               style={styles.input}
-              name="category"
-              value={eventForm.category}
+              name="typeLabel"
+              value={eventForm.typeLabel}
               onChange={handleEventChange}
             >
-              {getCategories().map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
+              {typeOptions.map((typeLabel) => (
+                <option key={typeLabel} value={typeLabel}>
+                  {typeLabel}
                 </option>
               ))}
             </select>
@@ -2172,15 +2257,35 @@ function App() {
             <label style={styles.label}>Sous-type</label>
             <select
               style={styles.input}
-              name="subcategory"
-              value={eventForm.subcategory}
+              name="subTypeLabel"
+              value={eventForm.subTypeLabel}
               onChange={handleEventChange}
             >
-              {eventSubcategories.map((sub) => (
+              <option value="">Aucun</option>
+              {subTypeOptions.map((sub) => (
                 <option key={sub} value={sub}>
                   {sub}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Modèle</label>
+            <select
+              style={styles.input}
+              name="modelId"
+              value={eventForm.modelId}
+              onChange={(e) => applyModelToEvent(e.target.value)}
+            >
+              <option value="">Aucun modèle</option>
+              {models
+                .filter((m) => m.domain === eventForm.domain)
+                .map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -2191,39 +2296,40 @@ function App() {
               name="title"
               value={eventForm.title}
               onChange={handleEventChange}
-              placeholder="Titre de l’événement"
+              placeholder="Ex. Réunion AVF / Conférence Nantes / Marche nordique"
             />
           </div>
 
           <div>
-            <label style={styles.label}>Qui</label>
+            <label style={styles.label}>Avec qui</label>
             <input
               style={styles.input}
-              name="who"
-              value={eventForm.who}
+              name="withWho"
+              value={eventForm.withWho}
               onChange={handleEventChange}
-              placeholder="Personne / groupe / partenaire"
+              placeholder="personne, groupe, intervenant..."
             />
           </div>
 
           <div>
-            <label style={styles.label}>Où</label>
+            <label style={styles.label}>Lieu</label>
             <input
               style={styles.input}
-              name="where"
-              value={eventForm.where}
+              name="place"
+              value={eventForm.place}
               onChange={handleEventChange}
+              placeholder="Nantes, Guérande..."
             />
           </div>
 
           <div>
-            <label style={styles.label}>Comment</label>
+            <label style={styles.label}>Canal</label>
             <input
               style={styles.input}
-              name="how"
-              value={eventForm.how}
+              name="channel"
+              value={eventForm.channel}
               onChange={handleEventChange}
-              placeholder="présentiel, téléphone, visio..."
+              placeholder="présentiel, visio, téléphone..."
             />
           </div>
 
@@ -2231,8 +2337,8 @@ function App() {
             <label style={styles.label}>Objectif</label>
             <input
               style={styles.input}
-              name="why"
-              value={eventForm.why}
+              name="objective"
+              value={eventForm.objective}
               onChange={handleEventChange}
             />
           </div>
@@ -2242,8 +2348,8 @@ function App() {
             <input
               style={styles.input}
               type="date"
-              name="whenDate"
-              value={eventForm.whenDate}
+              name="date"
+              value={eventForm.date}
               onChange={handleEventChange}
             />
           </div>
@@ -2253,8 +2359,8 @@ function App() {
             <input
               style={styles.input}
               type="time"
-              name="whenStart"
-              value={eventForm.whenStart}
+              name="startTime"
+              value={eventForm.startTime}
               onChange={handleEventChange}
             />
           </div>
@@ -2330,7 +2436,7 @@ function App() {
 
           {editingEventId ? (
             <p style={{ ...styles.subtle, marginTop: 10 }}>
-              En modification, seule l’occurrence sélectionnée est modifiée.
+              En modification d’occurrence, la récurrence est verrouillée.
             </p>
           ) : null}
 
@@ -2399,8 +2505,8 @@ function App() {
         </div>
 
         <div style={{ marginTop: 18 }}>
-          <button type="button" style={styles.buttonPrimary} onClick={addOrUpdateEvent}>
-            {editingEventId ? "Enregistrer" : "Ajouter"}
+          <button type="button" style={styles.buttonPrimary} onClick={saveEvent}>
+            {editingSeriesGroupId ? "Enregistrer la série" : editingEventId ? "Enregistrer l’occurrence" : "Ajouter"}
           </button>
 
           <button type="button" style={styles.buttonSecondary} onClick={resetEventForm}>
@@ -2411,56 +2517,75 @@ function App() {
     );
   }
 
-  function renderActivitiesPanel() {
-    const activitySubcategories = getSubcategories(activityForm.category);
+  function renderModelsPanel() {
+    const domains = getDomains();
+    const typeOptions = getTypes(modelForm.domain);
+    const subTypeOptions = getSubTypes(modelForm.domain, modelForm.typeLabel);
 
     return (
       <>
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>
-            {editingActivityId ? "Modifier une activité" : "Créer une activité"}
+            {editingModelId ? "Modifier un modèle" : "Créer un modèle"}
           </h2>
           <p style={styles.sectionText}>
-            Une activité peut appartenir à n’importe quelle catégorie. Exemple : R2C → marche nordique, course à pied, nordic tonic, réunion, autre.
+            Les modèles accélèrent la saisie d’éléments récurrents ou standards.
           </p>
 
           <div style={styles.grid}>
             <div>
-              <label style={styles.label}>Nom de l’activité *</label>
+              <label style={styles.label}>Libellé *</label>
               <input
                 style={styles.input}
-                name="name"
-                value={activityForm.name}
-                onChange={handleActivityChange}
-                placeholder="Ex. Marche nordique"
+                name="label"
+                value={modelForm.label}
+                onChange={handleModelChange}
+                placeholder="Ex. R2C · Activité · Marche nordique"
               />
             </div>
 
             <div>
-              <label style={styles.label}>Catégorie *</label>
+              <label style={styles.label}>Domaine</label>
               <select
                 style={styles.input}
-                name="category"
-                value={activityForm.category}
-                onChange={handleActivityChange}
+                name="domain"
+                value={modelForm.domain}
+                onChange={handleModelChange}
               >
-                {getCategories().map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+                {domains.map((domain) => (
+                  <option key={domain} value={domain}>
+                    {domain}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label style={styles.label}>Sous-type *</label>
+              <label style={styles.label}>Type</label>
               <select
                 style={styles.input}
-                name="subcategory"
-                value={activityForm.subcategory}
-                onChange={handleActivityChange}
+                name="typeLabel"
+                value={modelForm.typeLabel}
+                onChange={handleModelChange}
               >
-                {activitySubcategories.map((sub) => (
+                {typeOptions.map((typeLabel) => (
+                  <option key={typeLabel} value={typeLabel}>
+                    {typeLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.label}>Sous-type</label>
+              <select
+                style={styles.input}
+                name="subTypeLabel"
+                value={modelForm.subTypeLabel}
+                onChange={handleModelChange}
+              >
+                <option value="">Aucun</option>
+                {subTypeOptions.map((sub) => (
                   <option key={sub} value={sub}>
                     {sub}
                   </option>
@@ -2474,8 +2599,8 @@ function App() {
                 style={styles.input}
                 type="number"
                 name="defaultDuration"
-                value={activityForm.defaultDuration}
-                onChange={handleActivityChange}
+                value={modelForm.defaultDuration}
+                onChange={handleModelChange}
               />
             </div>
           </div>
@@ -2485,39 +2610,34 @@ function App() {
             <textarea
               style={styles.textarea}
               name="notes"
-              value={activityForm.notes}
-              onChange={handleActivityChange}
+              value={modelForm.notes}
+              onChange={handleModelChange}
             />
           </div>
 
           <div style={{ marginTop: 18 }}>
-            <button type="button" style={styles.buttonPrimary} onClick={saveActivity}>
-              {editingActivityId ? "Enregistrer l’activité" : "Ajouter l’activité"}
+            <button type="button" style={styles.buttonPrimary} onClick={saveModel}>
+              {editingModelId ? "Enregistrer le modèle" : "Ajouter le modèle"}
             </button>
-
-            <button type="button" style={styles.buttonSecondary} onClick={resetActivityForm}>
+            <button type="button" style={styles.buttonSecondary} onClick={resetModelForm}>
               Réinitialiser
             </button>
           </div>
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Catalogue des activités</h2>
+          <h2 style={styles.sectionTitle}>Catalogue des modèles</h2>
 
-          {activities.length === 0 ? (
-            <p style={styles.subtle}>Aucune activité enregistrée.</p>
+          {models.length === 0 ? (
+            <p style={styles.subtle}>Aucun modèle enregistré.</p>
           ) : (
             <div style={styles.listCompact}>
-              {activities
+              {models
                 .slice()
-                .sort((a, b) => {
-                  if (a.category !== b.category) return a.category.localeCompare(b.category);
-                  if (a.subcategory !== b.subcategory) return a.subcategory.localeCompare(b.subcategory);
-                  return a.name.localeCompare(b.name);
-                })
-                .map((activity) => (
+                .sort((a, b) => a.label.localeCompare(b.label))
+                .map((model) => (
                   <div
-                    key={activity.id}
+                    key={model.id}
                     style={{
                       border: "1px solid #e2e8f0",
                       borderRadius: 16,
@@ -2525,70 +2645,318 @@ function App() {
                       background: "#fff",
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <div>
-                        <strong>{activity.name}</strong>
-                        <div style={{ marginTop: 6 }}>
-                          <span
-                            style={{
-                              ...styles.inlineBadge,
-                              background: "#eef2ff",
-                              color: "#4338ca",
-                            }}
-                          >
-                            {activity.category}
-                          </span>
+                    <strong>{model.label}</strong>
 
-                          <span
-                            style={{
-                              ...styles.inlineBadge,
-                              background: "#f8fafc",
-                              color: "#334155",
-                            }}
-                          >
-                            {activity.subcategory}
-                          </span>
+                    <div style={{ marginTop: 8 }}>
+                      <span style={{ ...styles.inlineBadge, background: "#eef2ff", color: "#4338ca" }}>
+                        {model.domain}
+                      </span>
+                      <span style={{ ...styles.inlineBadge, background: "#f8fafc", color: "#334155" }}>
+                        {model.typeLabel}
+                      </span>
+                      {model.subTypeLabel ? (
+                        <span style={{ ...styles.inlineBadge, background: "#fff7ed", color: "#9a3412" }}>
+                          {model.subTypeLabel}
+                        </span>
+                      ) : null}
+                      <span style={{ ...styles.inlineBadge, background: "#f0fdf4", color: "#166534" }}>
+                        {model.defaultDuration} min
+                      </span>
+                    </div>
 
-                          <span
-                            style={{
-                              ...styles.inlineBadge,
-                              background: "#f0fdf4",
-                              color: "#166534",
-                            }}
-                          >
-                            {activity.defaultDuration} min
-                          </span>
-                        </div>
+                    {model.notes ? (
+                      <div style={{ marginTop: 8, color: "#475569", fontSize: 14 }}>{model.notes}</div>
+                    ) : null}
 
-                        {activity.notes ? (
-                          <div style={{ marginTop: 8, color: "#475569", fontSize: 14 }}>
-                            {activity.notes}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div>
-                        <button
-                          type="button"
-                          style={styles.buttonSecondary}
-                          onClick={() => editActivity(activity)}
-                        >
-                          Modifier
-                        </button>
-
-                        <button
-                          type="button"
-                          style={styles.buttonDanger}
-                          onClick={() => removeActivity(activity.id)}
-                        >
-                          Supprimer
-                        </button>
-                      </div>
+                    <div style={{ marginTop: 12 }}>
+                      <button type="button" style={styles.buttonSecondary} onClick={() => editModel(model)}>
+                        Modifier
+                      </button>
+                      <button type="button" style={styles.buttonDanger} onClick={() => deleteModel(model.id)}>
+                        Supprimer
+                      </button>
                     </div>
                   </div>
                 ))}
             </div>
           )}
+        </div>
+      </>
+    );
+  }
+
+  function addDomain() {
+    const clean = String(newDomainName || "").trim();
+    if (!clean) {
+      alert("Le nom du domaine est obligatoire.");
+      return;
+    }
+    if (structure[clean]) {
+      alert("Ce domaine existe déjà.");
+      return;
+    }
+    setStructure({
+      ...structure,
+      [clean]: {},
+    });
+    setNewDomainName("");
+  }
+
+  function addType() {
+    const cleanDomain = String(newTypeDomain || "").trim();
+    const cleanType = String(newTypeName || "").trim();
+    if (!cleanDomain || !cleanType) {
+      alert("Le domaine et le type sont obligatoires.");
+      return;
+    }
+    const currentDomain = structure[cleanDomain] || {};
+    if (currentDomain[cleanType]) {
+      alert("Ce type existe déjà dans ce domaine.");
+      return;
+    }
+    setStructure({
+      ...structure,
+      [cleanDomain]: {
+        ...currentDomain,
+        [cleanType]: [],
+      },
+    });
+    setNewTypeName("");
+  }
+
+  function addSubType() {
+    const cleanDomain = String(newSubDomain || "").trim();
+    const cleanType = String(newSubTypeParent || "").trim();
+    const cleanSub = String(newSubTypeName || "").trim();
+    if (!cleanDomain || !cleanType || !cleanSub) {
+      alert("Le domaine, le type et le sous-type sont obligatoires.");
+      return;
+    }
+    const currentDomain = structure[cleanDomain] || {};
+    const currentSubs = Array.isArray(currentDomain[cleanType]) ? currentDomain[cleanType] : [];
+    if (currentSubs.includes(cleanSub)) {
+      alert("Ce sous-type existe déjà.");
+      return;
+    }
+    setStructure({
+      ...structure,
+      [cleanDomain]: {
+        ...currentDomain,
+        [cleanType]: [...currentSubs, cleanSub],
+      },
+    });
+    setNewSubTypeName("");
+  }
+
+  function deleteDomain(domain) {
+    const next = { ...structure };
+    delete next[domain];
+    setStructure(next);
+  }
+
+  function deleteType(domain, typeLabel) {
+    const next = { ...structure };
+    const domainObj = { ...(next[domain] || {}) };
+    delete domainObj[typeLabel];
+    next[domain] = domainObj;
+    setStructure(next);
+  }
+
+  function deleteSubType(domain, typeLabel, subTypeLabel) {
+    const next = { ...structure };
+    const domainObj = { ...(next[domain] || {}) };
+    const subs = Array.isArray(domainObj[typeLabel]) ? domainObj[typeLabel] : [];
+    domainObj[typeLabel] = subs.filter((sub) => sub !== subTypeLabel);
+    next[domain] = domainObj;
+    setStructure(next);
+  }
+
+  function renderStructurePanel() {
+    const domains = getDomains();
+    const typeOptionsForSub = getTypes(newSubDomain);
+
+    return (
+      <>
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>Chaînage libre</h2>
+          <p style={styles.sectionText}>
+            Tu peux créer librement le référentiel : domaine → type → sous-type.
+          </p>
+
+          <div style={styles.grid}>
+            <div>
+              <label style={styles.label}>Nouveau domaine</label>
+              <input
+                style={styles.input}
+                value={newDomainName}
+                onChange={(e) => setNewDomainName(e.target.value)}
+                placeholder="Ex. Université permanente de Nantes"
+              />
+              <div style={{ marginTop: 10 }}>
+                <button type="button" style={styles.buttonPrimary} onClick={addDomain}>
+                  Ajouter domaine
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={styles.label}>Domaine du nouveau type</label>
+              <select
+                style={styles.input}
+                value={newTypeDomain}
+                onChange={(e) => setNewTypeDomain(e.target.value)}
+              >
+                {domains.map((domain) => (
+                  <option key={domain} value={domain}>
+                    {domain}
+                  </option>
+                ))}
+              </select>
+
+              <label style={{ ...styles.label, marginTop: 12, display: "block" }}>Nouveau type</label>
+              <input
+                style={styles.input}
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                placeholder="Ex. Sortie club"
+              />
+
+              <div style={{ marginTop: 10 }}>
+                <button type="button" style={styles.buttonPrimary} onClick={addType}>
+                  Ajouter type
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={styles.label}>Domaine du sous-type</label>
+              <select
+                style={styles.input}
+                value={newSubDomain}
+                onChange={(e) => {
+                  const nextDomain = e.target.value;
+                  const nextTypes = getTypes(nextDomain);
+                  setNewSubDomain(nextDomain);
+                  setNewSubTypeParent(nextTypes[0] || "");
+                }}
+              >
+                {domains.map((domain) => (
+                  <option key={domain} value={domain}>
+                    {domain}
+                  </option>
+                ))}
+              </select>
+
+              <label style={{ ...styles.label, marginTop: 12, display: "block" }}>Type parent</label>
+              <select
+                style={styles.input}
+                value={newSubTypeParent}
+                onChange={(e) => setNewSubTypeParent(e.target.value)}
+              >
+                {typeOptionsForSub.map((typeLabel) => (
+                  <option key={typeLabel} value={typeLabel}>
+                    {typeLabel}
+                  </option>
+                ))}
+              </select>
+
+              <label style={{ ...styles.label, marginTop: 12, display: "block" }}>Nouveau sous-type</label>
+              <input
+                style={styles.input}
+                value={newSubTypeName}
+                onChange={(e) => setNewSubTypeName(e.target.value)}
+                placeholder="Ex. Guérande"
+              />
+
+              <div style={{ marginTop: 10 }}>
+                <button type="button" style={styles.buttonPrimary} onClick={addSubType}>
+                  Ajouter sous-type
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <h2 style={styles.sectionTitle}>Référentiel actuel</h2>
+
+          <div style={styles.listCompact}>
+            {domains.map((domain) => (
+              <div
+                key={domain}
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 18,
+                  padding: 16,
+                  background: "#fff",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <div>
+                    <strong style={{ fontSize: 18 }}>{domain}</strong>
+                  </div>
+                  <div>
+                    <button type="button" style={styles.buttonDanger} onClick={() => deleteDomain(domain)}>
+                      Supprimer domaine
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+                  {getTypes(domain).map((typeLabel) => (
+                    <div
+                      key={`${domain}-${typeLabel}`}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 14,
+                        padding: 12,
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                        <strong>{typeLabel}</strong>
+                        <button type="button" style={styles.buttonDanger} onClick={() => deleteType(domain, typeLabel)}>
+                          Supprimer type
+                        </button>
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
+                        {getSubTypes(domain, typeLabel).length === 0 ? (
+                          <span style={styles.subtle}>Sans sous-type</span>
+                        ) : (
+                          getSubTypes(domain, typeLabel).map((sub) => (
+                            <span
+                              key={`${domain}-${typeLabel}-${sub}`}
+                              style={{
+                                ...styles.inlineBadge,
+                                background: "#fff7ed",
+                                color: "#9a3412",
+                              }}
+                            >
+                              {sub}
+                              <button
+                                type="button"
+                                onClick={() => deleteSubType(domain, typeLabel, sub)}
+                                style={{
+                                  border: "none",
+                                  background: "transparent",
+                                  cursor: "pointer",
+                                  fontWeight: 900,
+                                  color: "#9a3412",
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </>
     );
@@ -2600,7 +2968,7 @@ function App() {
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Navigation</h2>
           <p style={styles.sectionText}>
-            Parcours rapide : navigation temporelle, filtres, puis liste ou timeline.
+            Vue agenda ergonomique avec filtres, timeline, menu contextuel et actions rapides.
           </p>
 
           <div style={styles.topNav}>
@@ -2631,13 +2999,7 @@ function App() {
                 }}
                 onClick={() => setViewMode(mode)}
               >
-                {mode === "jour"
-                  ? "Jour"
-                  : mode === "semaine"
-                    ? "Semaine"
-                    : mode === "mois"
-                      ? "Mois"
-                      : "Année"}
+                {mode === "jour" ? "Jour" : mode === "semaine" ? "Semaine" : mode === "mois" ? "Mois" : "Année"}
               </button>
             ))}
           </div>
@@ -2650,7 +3012,7 @@ function App() {
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Filtres agenda</h2>
+          <h2 style={styles.sectionTitle}>Filtres</h2>
 
           <div style={styles.filterRow}>
             <div>
@@ -2659,7 +3021,7 @@ function App() {
                 style={styles.input}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="titre, lieu, personne, catégorie..."
+                placeholder="titre, lieu, domaine, personne..."
               />
             </div>
 
@@ -2679,36 +3041,21 @@ function App() {
             </div>
 
             <div>
-              <label style={styles.label}>Catégorie</label>
+              <label style={styles.label}>Domaine</label>
               <select
                 style={styles.input}
-                value={categoryFilter}
+                value={domainFilter}
                 onChange={(e) => {
-                  setCategoryFilter(e.target.value);
-                  setSubcategoryFilter("toutes");
+                  const nextDomain = e.target.value;
+                  setDomainFilter(nextDomain);
+                  setTypeFilter("tous");
+                  setSubTypeFilter("tous");
                 }}
               >
-                <option value="toutes">Toutes</option>
-                {getCategories().map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Sous-type</label>
-              <select
-                style={styles.input}
-                value={subcategoryFilter}
-                onChange={(e) => setSubcategoryFilter(e.target.value)}
-                disabled={categoryFilter === "toutes"}
-              >
-                <option value="toutes">Tous</option>
-                {currentSubcategoriesForFilter.map((sub) => (
-                  <option key={sub} value={sub}>
-                    {sub}
+                <option value="tous">Tous</option>
+                {getDomains().map((domain) => (
+                  <option key={domain} value={domain}>
+                    {domain}
                   </option>
                 ))}
               </select>
@@ -2719,11 +3066,36 @@ function App() {
               <select
                 style={styles.input}
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
+                onChange={(e) => {
+                  const nextType = e.target.value;
+                  setTypeFilter(nextType);
+                  setSubTypeFilter("tous");
+                }}
+                disabled={domainFilter === "tous"}
               >
                 <option value="tous">Tous</option>
-                <option value="rdv">Rendez-vous</option>
-                <option value="activite">Activités</option>
+                {currentTypeOptionsForFilter.map((typeLabel) => (
+                  <option key={typeLabel} value={typeLabel}>
+                    {typeLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.label}>Sous-type</label>
+              <select
+                style={styles.input}
+                value={subTypeFilter}
+                onChange={(e) => setSubTypeFilter(e.target.value)}
+                disabled={domainFilter === "tous" || typeFilter === "tous"}
+              >
+                <option value="tous">Tous</option>
+                {currentSubTypeOptionsForFilter.map((subTypeLabel) => (
+                  <option key={subTypeLabel} value={subTypeLabel}>
+                    {subTypeLabel}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -2734,7 +3106,7 @@ function App() {
                   checked={showOnlyConflicts}
                   onChange={(e) => setShowOnlyConflicts(e.target.checked)}
                 />
-                Seulement les conflits
+                Seulement conflits
               </label>
             </div>
           </div>
@@ -2742,7 +3114,7 @@ function App() {
 
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Timeline</h2>
-          <p style={styles.sectionText}>Visualisation directe de la charge et des chevauchements.</p>
+          <p style={styles.sectionText}>Visualisation directe des créneaux et chevauchements.</p>
 
           <div style={styles.timelineLegend}>
             <div style={styles.timelineLegendItem}>
@@ -2767,72 +3139,57 @@ function App() {
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Liste des événements</h2>
+          <h2 style={styles.sectionTitle}>Liste des éléments</h2>
 
           {filteredAgendaEvents.length === 0 ? (
-            <p style={styles.subtle}>Aucun événement sur cette période.</p>
+            <p style={styles.subtle}>Aucun élément sur cette période.</p>
           ) : (
             filteredAgendaEvents.map((evt) => (
-              <div key={evt.id} style={styles.eventCard}>
+              <div
+                key={evt.id}
+                style={styles.eventCard}
+                onContextMenu={(e) => openContextMenu(e, evt)}
+              >
                 <div style={styles.eventHeader}>
                   <div>
-                    <div style={styles.badge}>{evt.whenDate}</div>
+                    <div style={styles.badge}>{evt.date}</div>
                     <h3 style={styles.eventTitle}>{evt.title}</h3>
 
                     <div style={{ marginBottom: 6 }}>
-                      <span
-                        style={{
-                          ...styles.inlineBadge,
-                          ...(typeColors[evt.type] || typeColors.rdv),
-                        }}
-                      >
-                        {evt.type === "rdv" ? "Rendez-vous" : "Activité"}
+                      <span style={{ ...styles.inlineBadge, background: "#eef2ff", color: "#4338ca" }}>
+                        {evt.domain}
                       </span>
-
-                      <span
-                        style={{
-                          ...styles.inlineBadge,
-                          background: "#f8fafc",
-                          color: "#334155",
-                        }}
-                      >
-                        {resolveEventCategory(evt)}
+                      <span style={{ ...styles.inlineBadge, background: "#f8fafc", color: "#334155" }}>
+                        {evt.typeLabel}
                       </span>
-
-                      <span
-                        style={{
-                          ...styles.inlineBadge,
-                          background: "#fff7ed",
-                          color: "#9a3412",
-                        }}
-                      >
-                        {resolveEventSubcategory(evt)}
-                      </span>
-
-                      {evt.recurrenceGroupId ? (
-                        <span
-                          style={{
-                            ...styles.inlineBadge,
-                            background: "#faf5ff",
-                            color: "#7c3aed",
-                          }}
-                        >
-                          Récurrent
+                      {evt.subTypeLabel ? (
+                        <span style={{ ...styles.inlineBadge, background: "#fff7ed", color: "#9a3412" }}>
+                          {evt.subTypeLabel}
+                        </span>
+                      ) : null}
+                      {evt.seriesGroupId ? (
+                        <span style={{ ...styles.inlineBadge, background: "#faf5ff", color: "#7c3aed" }}>
+                          Série
                         </span>
                       ) : null}
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      ...(statusColors[evt.status] || statusColors["prévu"]),
-                      padding: "6px 12px",
-                      borderRadius: 999,
-                      fontSize: 12,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {evt.status}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        ...(statusColors[evt.status] || statusColors["prévu"]),
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {evt.status}
+                    </div>
+                    <button type="button" style={styles.contextButton} onClick={(e) => openContextMenu(e, evt)}>
+                      Actions ▾
+                    </button>
                   </div>
                 </div>
 
@@ -2841,7 +3198,7 @@ function App() {
                 <div style={styles.metaGrid}>
                   <div style={styles.metaBox}>
                     <strong>Heure</strong>
-                    <div>{evt.whenStart}</div>
+                    <div>{evt.startTime}</div>
                   </div>
 
                   <div style={styles.metaBox}>
@@ -2855,42 +3212,40 @@ function App() {
                   </div>
 
                   <div style={styles.metaBox}>
-                    <strong>Trajet</strong>
-                    <div>
-                      avant {evt.travelBefore} min / après {evt.travelAfter} min
-                    </div>
+                    <strong>Trajets</strong>
+                    <div>avant {evt.travelBefore} / après {evt.travelAfter} min</div>
                   </div>
 
-                  {evt.who && (
+                  {evt.withWho ? (
                     <div style={styles.metaBox}>
-                      <strong>Qui</strong>
-                      <div>{evt.who}</div>
+                      <strong>Avec qui</strong>
+                      <div>{evt.withWho}</div>
                     </div>
-                  )}
+                  ) : null}
 
-                  {evt.where && (
+                  {evt.place ? (
                     <div style={styles.metaBox}>
                       <strong>Lieu</strong>
-                      <div>{evt.where}</div>
+                      <div>{evt.place}</div>
                     </div>
-                  )}
+                  ) : null}
 
-                  {evt.how && (
+                  {evt.channel ? (
                     <div style={styles.metaBox}>
-                      <strong>Comment</strong>
-                      <div>{evt.how}</div>
+                      <strong>Canal</strong>
+                      <div>{evt.channel}</div>
                     </div>
-                  )}
+                  ) : null}
 
-                  {evt.why && (
+                  {evt.objective ? (
                     <div style={styles.metaBox}>
                       <strong>Objectif</strong>
-                      <div>{evt.why}</div>
+                      <div>{evt.objective}</div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
-                {evt.notes && (
+                {evt.notes ? (
                   <div
                     style={{
                       background: "#ffffff",
@@ -2903,31 +3258,7 @@ function App() {
                     <strong>Notes</strong>
                     <div style={{ marginTop: 6 }}>{evt.notes}</div>
                   </div>
-                )}
-
-                <div>
-                  <button type="button" style={styles.buttonSecondary} onClick={() => editEvent(evt)}>
-                    Modifier
-                  </button>
-
-                  <button
-                    type="button"
-                    style={styles.buttonDanger}
-                    onClick={() => deleteEvent(evt.id)}
-                  >
-                    Supprimer
-                  </button>
-
-                  {evt.recurrenceGroupId ? (
-                    <button
-                      type="button"
-                      style={styles.buttonDanger}
-                      onClick={() => deleteRecurrenceGroup(evt.recurrenceGroupId)}
-                    >
-                      Supprimer la série
-                    </button>
-                  ) : null}
-                </div>
+                ) : null}
               </div>
             ))
           )}
@@ -2943,7 +3274,7 @@ function App() {
       <div style={styles.card}>
         <h2 style={styles.sectionTitle}>Statistiques</h2>
         <p style={styles.sectionText}>
-          Les statistiques peuvent être calculées sur la période affichée ou sur une plage indépendante.
+          Statistiques sur la période affichée, sur semaine, mois, année, ou sur dates personnalisées.
         </p>
 
         <div style={styles.filterRow}>
@@ -2992,27 +3323,17 @@ function App() {
 
           <div>
             <label style={styles.label}>Période retenue</label>
-            <div style={{ ...styles.input, display: "flex", alignItems: "center" }}>
-              {range.label}
-            </div>
+            <div style={{ ...styles.input, display: "flex", alignItems: "center" }}>{range.label}</div>
           </div>
         </div>
 
         <div style={styles.statsGrid}>
           <div style={styles.statBox}>
-            <div style={styles.badge}>Événements</div>
+            <div style={styles.badge}>Éléments</div>
             <div style={styles.statValue}>{stats.count}</div>
           </div>
           <div style={styles.statBox}>
-            <div style={styles.badge}>Rendez-vous</div>
-            <div style={styles.statValue}>{stats.rdvCount}</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.badge}>Activités</div>
-            <div style={styles.statValue}>{stats.activityCount}</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.badge}>Temps activité / RDV</div>
+            <div style={styles.badge}>Temps activité</div>
             <div style={styles.statValue}>{formatMinutes(stats.duration)}</div>
           </div>
           <div style={styles.statBox}>
@@ -3040,12 +3361,20 @@ function App() {
             <div style={styles.statValue}>{stats.completionRate}%</div>
           </div>
           <div style={styles.statBox}>
-            <div style={styles.badge}>Catégorie dominante</div>
-            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topCategory}</div>
+            <div style={styles.badge}>Domaine dominant</div>
+            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topDomain}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Type dominant</div>
+            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topType}</div>
           </div>
           <div style={styles.statBox}>
             <div style={styles.badge}>Sous-type dominant</div>
-            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topSubcategory}</div>
+            <div style={{ ...styles.statValue, fontSize: 18 }}>{stats.topSubType}</div>
+          </div>
+          <div style={styles.statBox}>
+            <div style={styles.badge}>Annulés</div>
+            <div style={styles.statValue}>{stats.cancelled}</div>
           </div>
         </div>
 
@@ -3053,16 +3382,16 @@ function App() {
 
         <div style={styles.grid}>
           <div>
-            <h3 style={{ marginTop: 0 }}>Répartition par catégorie</h3>
+            <h3 style={{ marginTop: 0 }}>Répartition par domaine</h3>
             <div style={styles.listCompact}>
-              {Object.keys(stats.byCategory).length === 0 ? (
+              {Object.keys(stats.byDomain).length === 0 ? (
                 <p style={styles.subtle}>Aucune donnée.</p>
               ) : (
-                Object.entries(stats.byCategory)
+                Object.entries(stats.byDomain)
                   .sort((a, b) => b[1] - a[1])
-                  .map(([cat, value]) => (
+                  .map(([key, value]) => (
                     <div
-                      key={cat}
+                      key={key}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
@@ -3073,7 +3402,36 @@ function App() {
                         background: "#fff",
                       }}
                     >
-                      <span>{cat}</span>
+                      <span>{key}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 style={{ marginTop: 0 }}>Répartition par type</h3>
+            <div style={styles.listCompact}>
+              {Object.keys(stats.byType).length === 0 ? (
+                <p style={styles.subtle}>Aucune donnée.</p>
+              ) : (
+                Object.entries(stats.byType)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([key, value]) => (
+                    <div
+                      key={key}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 14,
+                        padding: "10px 12px",
+                        background: "#fff",
+                      }}
+                    >
+                      <span>{key}</span>
                       <strong>{value}</strong>
                     </div>
                   ))
@@ -3084,14 +3442,14 @@ function App() {
           <div>
             <h3 style={{ marginTop: 0 }}>Répartition par sous-type</h3>
             <div style={styles.listCompact}>
-              {Object.keys(stats.bySubcategory).length === 0 ? (
+              {Object.keys(stats.bySubType).length === 0 ? (
                 <p style={styles.subtle}>Aucune donnée.</p>
               ) : (
-                Object.entries(stats.bySubcategory)
+                Object.entries(stats.bySubType)
                   .sort((a, b) => b[1] - a[1])
-                  .map(([sub, value]) => (
+                  .map(([key, value]) => (
                     <div
-                      key={sub}
+                      key={key}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
@@ -3102,7 +3460,7 @@ function App() {
                         background: "#fff",
                       }}
                     >
-                      <span>{sub}</span>
+                      <span>{key}</span>
                       <strong>{value}</strong>
                     </div>
                   ))
@@ -3118,10 +3476,10 @@ function App() {
     <div style={styles.page}>
       <div style={styles.wrapper}>
         <div style={styles.hero}>
-          <h1 style={styles.heroTitle}>Agenda RDV / Activités</h1>
+          <h1 style={styles.heroTitle}>Agenda v5 ergonomique</h1>
           <p style={styles.heroText}>
-            Version optimisée : menus, activités modifiables, catégories et sous-types,
-            récurrence, timeline et statistiques filtrables sur dates, semaine, mois ou année.
+            Chaînage libre domaine → type → sous-type, modèles réutilisables, modification
+            d’occurrence ou de série complète, menu contextuel, timeline et statistiques avancées.
           </p>
         </div>
 
@@ -3129,8 +3487,11 @@ function App() {
 
         {activeMenu === "agenda" && renderAgendaPanel()}
         {activeMenu === "event" && renderEventForm()}
-        {activeMenu === "activities" && renderActivitiesPanel()}
+        {activeMenu === "models" && renderModelsPanel()}
+        {activeMenu === "structure" && renderStructurePanel()}
         {activeMenu === "stats" && renderStatsPanel()}
+
+        {renderContextMenu()}
       </div>
     </div>
   );
