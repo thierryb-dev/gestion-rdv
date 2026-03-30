@@ -7,6 +7,7 @@ function App() {
   });
 
   const [viewMode, setViewMode] = useState("jour");
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     localStorage.setItem("rdvs", JSON.stringify(rdvs));
@@ -55,6 +56,28 @@ function App() {
     return `${r.what} ${r.who ? "avec " + r.who : ""} ${r.where ? "à " + r.where : ""}`;
   }
 
+  function changeDate(step) {
+    const newDate = new Date(currentDate);
+
+    if (viewMode === "jour") {
+      newDate.setDate(newDate.getDate() + step);
+    }
+
+    if (viewMode === "semaine") {
+      newDate.setDate(newDate.getDate() + step * 7);
+    }
+
+    if (viewMode === "mois") {
+      newDate.setMonth(newDate.getMonth() + step);
+    }
+
+    if (viewMode === "annee") {
+      newDate.setFullYear(newDate.getFullYear() + step);
+    }
+
+    setCurrentDate(newDate);
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>Gestion des rendez-vous</h1>
@@ -71,14 +94,37 @@ function App() {
       <br />
       <input type="time" name="whenStart" value={form.whenStart} onChange={handleChange} />
       <br />
-      <input type="number" name="duration" placeholder="Durée" value={form.duration} onChange={handleChange} />
+      <input
+        type="number"
+        name="duration"
+        placeholder="Durée"
+        value={form.duration}
+        onChange={handleChange}
+      />
       <br />
-      <input type="number" name="travelBefore" placeholder="Temps avant" value={form.travelBefore} onChange={handleChange} />
+      <input
+        type="number"
+        name="travelBefore"
+        placeholder="Temps avant"
+        value={form.travelBefore}
+        onChange={handleChange}
+      />
       <br />
-      <input type="number" name="travelAfter" placeholder="Temps après" value={form.travelAfter} onChange={handleChange} />
+      <input
+        type="number"
+        name="travelAfter"
+        placeholder="Temps après"
+        value={form.travelAfter}
+        onChange={handleChange}
+      />
       <br />
 
       <button onClick={addRdv}>Ajouter</button>
+
+      <div style={{ margin: "20px 0" }}>
+        <button onClick={() => changeDate(-1)}>◀</button>
+        <button onClick={() => changeDate(1)}>▶</button>
+      </div>
 
       <div style={{ margin: "20px 0" }}>
         <button onClick={() => setViewMode("jour")}>Jour</button>
@@ -87,34 +133,37 @@ function App() {
         <button onClick={() => setViewMode("annee")}>Année</button>
       </div>
 
+      <p>{currentDate.toDateString()}</p>
+
       <h2>Liste des rendez-vous</h2>
 
       {rdvs
         .filter((r) => {
-          const today = new Date();
           const rdvDate = new Date(r.whenDate);
 
           if (viewMode === "jour") {
-            return rdvDate.toDateString() === today.toDateString();
+            return rdvDate.toDateString() === currentDate.toDateString();
           }
 
           if (viewMode === "semaine") {
-            const start = new Date(today);
-            start.setDate(today.getDate() - today.getDay());
+            const start = new Date(currentDate);
+            start.setDate(currentDate.getDate() - currentDate.getDay());
+
             const end = new Date(start);
             end.setDate(start.getDate() + 6);
+
             return rdvDate >= start && rdvDate <= end;
           }
 
           if (viewMode === "mois") {
             return (
-              rdvDate.getMonth() === today.getMonth() &&
-              rdvDate.getFullYear() === today.getFullYear()
+              rdvDate.getMonth() === currentDate.getMonth() &&
+              rdvDate.getFullYear() === currentDate.getFullYear()
             );
           }
 
           if (viewMode === "annee") {
-            return rdvDate.getFullYear() === today.getFullYear();
+            return rdvDate.getFullYear() === currentDate.getFullYear();
           }
 
           return true;
