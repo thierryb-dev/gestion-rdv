@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-const initialForm = {
+const STORAGE_KEY = "rdvs";
+const INITIAL_FORM = {
   what: "",
   who: "",
   where: "",
@@ -17,11 +18,15 @@ const initialForm = {
 
 function App() {
   const [rdvs, setRdvs] = useState(() => {
-    const saved = localStorage.getItem("rdvs");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(INITIAL_FORM);
   const [editingId, setEditingId] = useState(null);
 
   const [viewMode, setViewMode] = useState("jour");
@@ -31,59 +36,84 @@ function App() {
   const [statusFilter, setStatusFilter] = useState("tous");
   const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
 
+  const fileInputRef = useRef(null);
+
   useEffect(() => {
-    localStorage.setItem("rdvs", JSON.stringify(rdvs));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rdvs));
   }, [rdvs]);
 
-  function handleChange(e) {
-    const { name, value } = e.target;
+  function handleChange(event) {
+    const { name, value } = event.target;
     const numericFields = ["duration", "travelBefore", "travelAfter"];
 
     setForm((prev) => ({
       ...prev,
-      [name]: numericFields.includes(name) ? Number(value) : value,
+      [name]:
+        numericFields.includes(name)
+          ? value === ""
+            ? ""
+            : Number(value)
+          : value,
     }));
   }
 
   function resetForm() {
-    setForm(initialForm);
+    setForm(INITIAL_FORM);
     setEditingId(null);
   }
 
-  function generateTitle(r) {
+  function generateTitle(rdv) {
     const parts = [
-      r.what?.trim(),
-      r.who?.trim() ? `avec ${r.who.trim()}` : "",
-      r.where?.trim() ? `à ${r.where.trim()}` : "",
-      r.why?.trim() ? `pour ${r.why.trim()}` : "",
-      r.how?.trim() ? `via ${r.how.trim()}` : "",
+      rdv.what?.trim(),
+      rdv.who?.trim() ? `avec ${rdv.who.trim()}` : "",
+      rdv.where?.trim() ? `à ${rdv.where.trim()}` : "",
+      rdv.why?.trim() ? `pour ${rdv.why.trim()}` : "",
+      rdv.how?.trim() ? `via ${rdv.how.trim()}` : "",
     ].filter(Boolean);
 
     return parts.length ? parts.join(" · ") : "Rendez-vous sans titre";
   }
 
-  function addOrUpdateRdv() {
-    if (!form.what || !form.whenDate || !form.whenStart) {
-      alert("Merci de renseigner au minimum : Quoi, Date, Heure.");
-      return;
-    }
+  function validateForm(data) {
+    if (!data.what?.trim()) return "Le champ 'Quoi' est obligatoire.";
+    if (!data.whenDate) return "La date est obligatoire.";
+    if (!data.whenStart) return "L'heure est obligatoire.";
+    if (Number(data.duration) < 0) return "La durée doit être positive.";
+    if (Number(data.travelBefore) < 0) return "Le trajet avant doit être positif.";
+    if (Number(data.travelAfter) < 0) return "Le trajet après doit être positif.";
+    return null;
+  }
 
+  function addOrUpdateRdv() {
     const payload = {
       ...form,
+      what: form.what.trim(),
+      who: form.who.trim(),
+      where: form.where.trim(),
+      how: form.how.trim(),
+      why: form.why.trim(),
+      notes: form.notes.trim(),
       duration: Number(form.duration || 0),
       travelBefore: Number(form.travelBefore || 0),
       travelAfter: Number(form.travelAfter || 0),
     };
 
+    const error = validateForm(payload);
+    if (error) {
+      alert(error);
+      return;
+    }
+
     if (editingId) {
       setRdvs((prev) =>
-        prev.map((r) => (r.id === editingId ? { ...r, ...payload } : r))
+        prev.map((rdv) => (rdv.id === editingId ? { ...rdv, ...payload } : rdv))
       );
     } else {
       setRdvs((prev) => [
         ...prev,
         {
           id: Date.now(),
+          createdAt: new Date().toISOString(),
           ...payload,
         },
       ]);
@@ -93,46 +123,111 @@ function App() {
   }
 
   function deleteRdv(id) {
-    setRdvs((prev) => prev.filter((r) => r.id !== id));
+    setRdvs((prev) => prev.filter((rdv) => rdv.id !== id));
+    if (editingId === id) resetForm();
   }
 
-  function editRdv(r) {
-    setEditingId(r.id);
+  function editRdv(rdv) {
+    setEditingId(rdv.id);
     setForm({
-      what: r.what || "",
-      who: r.who || "",
-      where: r.where || "",
-      whenDate: r.whenDate || "",
-      whenStart: r.whenStart || "",
-      duration: Number(r.duration || 60),
-      how: r.how || "",
-      why: r.why || "",
-      notes: r.notes || "",
-      status: r.status || "prévu",
-      travelBefore: Number(r.travelBefore || 0),
-      travelAfter: Number(r.travelAfter || 0),
+      what: rdv.what || "",
+      who: rdv.who || "",
+      where: rdv.where || "",
+      whenDate: rdv.whenDate || "",
+      whenStart: rdv.whenStart || "",
+      duration: Number(rdv.duration ?? 60),
+      how: rdv.how || "",
+      why: rdv.why || "",
+      notes: rdv.notes || "",
+      status: rdv.status || "prévu",
+      travelBefore: Number(rdv.travelBefore ?? 0),
+      travelAfter: Number(rdv.travelAfter ?? 0),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function exportData() {
+    const blob = new Blob([JSON.stringify(rdvs, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "rendez-vous.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+
+        if (!Array.isArray(parsed)) {
+          alert("Le fichier doit contenir une liste de rendez-vous.");
+          return;
+        }
+
+        const sanitized = parsed.map((item, index) => ({
+          id: item.id ?? Date.now() + index,
+          createdAt: item.createdAt ?? new Date().toISOString(),
+          what: String(item.what ?? ""),
+          who: String(item.who ?? ""),
+          where: String(item.where ?? ""),
+          whenDate: String(item.whenDate ?? ""),
+          whenStart: String(item.whenStart ?? ""),
+          duration: Number(item.duration ?? 60),
+          how: String(item.how ?? ""),
+          why: String(item.why ?? ""),
+          notes: String(item.notes ?? ""),
+          status: String(item.status ?? "prévu"),
+          travelBefore: Number(item.travelBefore ?? 0),
+          travelAfter: Number(item.travelAfter ?? 0),
+        }));
+
+        setRdvs(sanitized);
+        resetForm();
+        alert("Import réussi.");
+      } catch {
+        alert("Fichier JSON invalide.");
+      } finally {
+        event.target.value = "";
+      }
+    };
+
+    reader.readAsText(file);
+  }
+
   function getStartOfWeek(date) {
-    const d = new Date(date);
-    const day = d.getDay();
+    const result = new Date(date);
+    const day = result.getDay();
     const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
+    result.setDate(result.getDate() + diff);
+    result.setHours(0, 0, 0, 0);
+    return result;
+  }
+
+  function getEndOfWeek(date) {
+    const end = new Date(getStartOfWeek(date));
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
   }
 
   function changeDate(step) {
-    const newDate = new Date(currentDate);
+    const next = new Date(currentDate);
 
-    if (viewMode === "jour") newDate.setDate(newDate.getDate() + step);
-    if (viewMode === "semaine") newDate.setDate(newDate.getDate() + step * 7);
-    if (viewMode === "mois") newDate.setMonth(newDate.getMonth() + step);
-    if (viewMode === "annee") newDate.setFullYear(newDate.getFullYear() + step);
+    if (viewMode === "jour") next.setDate(next.getDate() + step);
+    if (viewMode === "semaine") next.setDate(next.getDate() + step * 7);
+    if (viewMode === "mois") next.setMonth(next.getMonth() + step);
+    if (viewMode === "annee") next.setFullYear(next.getFullYear() + step);
 
-    setCurrentDate(newDate);
+    setCurrentDate(next);
   }
 
   function goToday() {
@@ -151,8 +246,7 @@ function App() {
 
     if (viewMode === "semaine") {
       const start = getStartOfWeek(currentDate);
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
+      const end = getEndOfWeek(currentDate);
       return `Semaine du ${start.toLocaleDateString("fr-FR")} au ${end.toLocaleDateString("fr-FR")}`;
     }
 
@@ -166,8 +260,9 @@ function App() {
     return String(currentDate.getFullYear());
   }
 
-  function isInCurrentView(r) {
-    const rdvDate = new Date(`${r.whenDate}T12:00:00`);
+  function isInCurrentView(rdv) {
+    const rdvDate = new Date(`${rdv.whenDate}T12:00:00`);
+    if (Number.isNaN(rdvDate.getTime())) return false;
 
     if (viewMode === "jour") {
       return rdvDate.toDateString() === currentDate.toDateString();
@@ -175,9 +270,7 @@ function App() {
 
     if (viewMode === "semaine") {
       const start = getStartOfWeek(currentDate);
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
+      const end = getEndOfWeek(currentDate);
       return rdvDate >= start && rdvDate <= end;
     }
 
@@ -195,22 +288,22 @@ function App() {
     return true;
   }
 
-  function getStartDateTime(r) {
-    return new Date(`${r.whenDate}T${r.whenStart}`);
+  function getDateTimeFromRdv(rdv) {
+    return new Date(`${rdv.whenDate}T${rdv.whenStart}`);
   }
 
-  function getEffectiveStart(r) {
-    const start = getStartDateTime(r);
-    start.setMinutes(start.getMinutes() - Number(r.travelBefore || 0));
+  function getEffectiveStart(rdv) {
+    const start = getDateTimeFromRdv(rdv);
+    start.setMinutes(start.getMinutes() - Number(rdv.travelBefore || 0));
     return start;
   }
 
-  function getEffectiveEnd(r) {
-    const end = getStartDateTime(r);
+  function getEffectiveEnd(rdv) {
+    const end = getDateTimeFromRdv(rdv);
     end.setMinutes(
       end.getMinutes() +
-        Number(r.duration || 0) +
-        Number(r.travelAfter || 0)
+        Number(rdv.duration || 0) +
+        Number(rdv.travelAfter || 0)
     );
     return end;
   }
@@ -234,16 +327,16 @@ function App() {
     const q = search.trim().toLowerCase();
 
     return [...rdvs]
-      .filter((r) => isInCurrentView(r))
-      .filter((r) => {
+      .filter((rdv) => isInCurrentView(rdv))
+      .filter((rdv) => {
         const haystack = [
-          r.what,
-          r.who,
-          r.where,
-          r.how,
-          r.why,
-          r.notes,
-          generateTitle(r),
+          rdv.what,
+          rdv.who,
+          rdv.where,
+          rdv.how,
+          rdv.why,
+          rdv.notes,
+          generateTitle(rdv),
         ]
           .filter(Boolean)
           .join(" ")
@@ -251,24 +344,21 @@ function App() {
 
         return !q || haystack.includes(q);
       })
-      .filter((r) => statusFilter === "tous" || r.status === statusFilter)
-      .filter((r) => !showOnlyConflicts || hasConflict(r))
-      .sort((a, b) => {
-        const da = new Date(`${a.whenDate}T${a.whenStart}`);
-        const db = new Date(`${b.whenDate}T${b.whenStart}`);
-        return da - db;
-      });
+      .filter((rdv) => statusFilter === "tous" || rdv.status === statusFilter)
+      .filter((rdv) => !showOnlyConflicts || hasConflict(rdv))
+      .sort((a, b) => getDateTimeFromRdv(a) - getDateTimeFromRdv(b));
   }, [rdvs, currentDate, viewMode, search, statusFilter, showOnlyConflicts]);
 
   const stats = useMemo(() => {
     return {
       count: filteredRdvs.length,
-      duration: filteredRdvs.reduce((sum, r) => sum + Number(r.duration || 0), 0),
+      duration: filteredRdvs.reduce((sum, rdv) => sum + Number(rdv.duration || 0), 0),
       travel: filteredRdvs.reduce(
-        (sum, r) => sum + Number(r.travelBefore || 0) + Number(r.travelAfter || 0),
+        (sum, rdv) =>
+          sum + Number(rdv.travelBefore || 0) + Number(rdv.travelAfter || 0),
         0
       ),
-      conflicts: filteredRdvs.filter((r) => hasConflict(r)).length,
+      conflicts: filteredRdvs.filter((rdv) => hasConflict(rdv)).length,
     };
   }, [filteredRdvs]);
 
@@ -365,7 +455,6 @@ function App() {
       fontSize: 14,
       outline: "none",
       boxSizing: "border-box",
-      boxShadow: "inset 0 1px 2px rgba(15,23,42,0.03)",
     },
     textarea: {
       width: "100%",
@@ -379,7 +468,6 @@ function App() {
       outline: "none",
       boxSizing: "border-box",
       resize: "vertical",
-      boxShadow: "inset 0 1px 2px rgba(15,23,42,0.03)",
     },
     label: {
       fontSize: 13,
@@ -503,8 +591,8 @@ function App() {
         <div style={styles.hero}>
           <h1 style={styles.heroTitle}>Gestion des rendez-vous</h1>
           <p style={styles.heroText}>
-            Une interface moderne pour organiser tes rendez-vous, gérer les
-            trajets, visualiser les périodes et repérer rapidement les conflits.
+            Application moderne avec import/export JSON, vues temporelles,
+            gestion des trajets et détection des conflits.
           </p>
         </div>
 
@@ -513,7 +601,7 @@ function App() {
             {editingId ? "Modifier un rendez-vous" : "Créer un rendez-vous"}
           </h2>
           <p style={styles.sectionText}>
-            Le titre est généré automatiquement à partir de la logique QQOQCP.
+            Le titre est généré automatiquement avec la logique QQOQCP.
           </p>
 
           <div style={styles.grid}>
@@ -666,6 +754,22 @@ function App() {
             <button style={styles.buttonSecondary} onClick={resetForm}>
               Réinitialiser
             </button>
+            <button style={styles.buttonSecondary} onClick={exportData}>
+              Exporter JSON
+            </button>
+            <button
+              style={styles.buttonSecondary}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Importer JSON
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              style={{ display: "none" }}
+              onChange={importData}
+            />
           </div>
         </div>
 
@@ -760,7 +864,14 @@ function App() {
             </div>
 
             <div style={{ display: "flex", alignItems: "end" }}>
-              <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
+              <label
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  fontWeight: 700,
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={showOnlyConflicts}
@@ -803,17 +914,17 @@ function App() {
           {filteredRdvs.length === 0 ? (
             <p style={styles.subtle}>Aucun rendez-vous sur cette période.</p>
           ) : (
-            filteredRdvs.map((r) => (
-              <div key={r.id} style={styles.rdvCard}>
+            filteredRdvs.map((rdv) => (
+              <div key={rdv.id} style={styles.rdvCard}>
                 <div style={styles.rdvHeader}>
                   <div>
-                    <div style={styles.badge}>{r.whenDate}</div>
-                    <h3 style={styles.rdvTitle}>{generateTitle(r)}</h3>
+                    <div style={styles.badge}>{rdv.whenDate}</div>
+                    <h3 style={styles.rdvTitle}>{generateTitle(rdv)}</h3>
                   </div>
 
                   <div
                     style={{
-                      ...(statusColors[r.status] || statusColors["prévu"]),
+                      ...(statusColors[rdv.status] || statusColors["prévu"]),
                       padding: "6px 12px",
                       borderRadius: 999,
                       fontSize: 12,
@@ -821,62 +932,62 @@ function App() {
                       textTransform: "capitalize",
                     }}
                   >
-                    {r.status}
+                    {rdv.status}
                   </div>
                 </div>
 
-                {hasConflict(r) && (
+                {hasConflict(rdv) && (
                   <p style={styles.conflict}>Conflit de planning détecté</p>
                 )}
 
                 <div style={styles.metaGrid}>
                   <div style={styles.metaBox}>
                     <strong>Heure</strong>
-                    <div>{r.whenStart}</div>
+                    <div>{rdv.whenStart}</div>
                   </div>
 
                   <div style={styles.metaBox}>
                     <strong>Durée</strong>
-                    <div>{r.duration} min</div>
+                    <div>{rdv.duration} min</div>
                   </div>
 
                   <div style={styles.metaBox}>
                     <strong>Trajet</strong>
                     <div>
-                      avant {r.travelBefore} min / après {r.travelAfter} min
+                      avant {rdv.travelBefore} min / après {rdv.travelAfter} min
                     </div>
                   </div>
 
-                  {r.who && (
+                  {rdv.who && (
                     <div style={styles.metaBox}>
                       <strong>Qui</strong>
-                      <div>{r.who}</div>
+                      <div>{rdv.who}</div>
                     </div>
                   )}
 
-                  {r.where && (
+                  {rdv.where && (
                     <div style={styles.metaBox}>
                       <strong>Lieu</strong>
-                      <div>{r.where}</div>
+                      <div>{rdv.where}</div>
                     </div>
                   )}
 
-                  {r.how && (
+                  {rdv.how && (
                     <div style={styles.metaBox}>
                       <strong>Comment</strong>
-                      <div>{r.how}</div>
+                      <div>{rdv.how}</div>
                     </div>
                   )}
 
-                  {r.why && (
+                  {rdv.why && (
                     <div style={styles.metaBox}>
                       <strong>Pourquoi</strong>
-                      <div>{r.why}</div>
+                      <div>{rdv.why}</div>
                     </div>
                   )}
                 </div>
 
-                {r.notes && (
+                {rdv.notes && (
                   <div
                     style={{
                       background: "#ffffff",
@@ -887,12 +998,15 @@ function App() {
                     }}
                   >
                     <strong>Notes</strong>
-                    <div style={{ marginTop: 6 }}>{r.notes}</div>
+                    <div style={{ marginTop: 6 }}>{rdv.notes}</div>
                   </div>
                 )}
 
                 <div>
-                  <button style={styles.buttonSecondary} onClick={() => editRdv(r)}>
+                  <button
+                    style={styles.buttonSecondary}
+                    onClick={() => editRdv(rdv)}
+                  >
                     Modifier
                   </button>
                   <button
@@ -901,7 +1015,7 @@ function App() {
                       borderColor: "#fca5a5",
                       color: "#b91c1c",
                     }}
-                    onClick={() => deleteRdv(r.id)}
+                    onClick={() => deleteRdv(rdv.id)}
                   >
                     Supprimer
                   </button>
