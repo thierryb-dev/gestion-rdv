@@ -42,18 +42,17 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rdvs));
   }, [rdvs]);
 
-  function handleChange(event) {
-    const { name, value } = event.target;
+  function handleChange(e) {
+    const { name, value } = e.target;
     const numericFields = ["duration", "travelBefore", "travelAfter"];
 
     setForm((prev) => ({
       ...prev,
-      [name]:
-        numericFields.includes(name)
-          ? value === ""
-            ? ""
-            : Number(value)
-          : value,
+      [name]: numericFields.includes(name)
+        ? value === ""
+          ? ""
+          : Number(value)
+        : value,
     }));
   }
 
@@ -74,31 +73,33 @@ function App() {
     return parts.length ? parts.join(" · ") : "Rendez-vous sans titre";
   }
 
-  function validateForm(data) {
+  function validateRdv(data) {
     if (!data.what?.trim()) return "Le champ 'Quoi' est obligatoire.";
     if (!data.whenDate) return "La date est obligatoire.";
     if (!data.whenStart) return "L'heure est obligatoire.";
-    if (Number(data.duration) < 0) return "La durée doit être positive.";
-    if (Number(data.travelBefore) < 0) return "Le trajet avant doit être positif.";
-    if (Number(data.travelAfter) < 0) return "Le trajet après doit être positif.";
+    if (Number(data.duration || 0) < 0) return "La durée doit être positive.";
+    if (Number(data.travelBefore || 0) < 0) return "Le trajet avant doit être positif.";
+    if (Number(data.travelAfter || 0) < 0) return "Le trajet après doit être positif.";
     return null;
   }
 
   function addOrUpdateRdv() {
     const payload = {
-      ...form,
-      what: form.what.trim(),
-      who: form.who.trim(),
-      where: form.where.trim(),
-      how: form.how.trim(),
-      why: form.why.trim(),
-      notes: form.notes.trim(),
+      what: String(form.what || "").trim(),
+      who: String(form.who || "").trim(),
+      where: String(form.where || "").trim(),
+      whenDate: String(form.whenDate || ""),
+      whenStart: String(form.whenStart || ""),
       duration: Number(form.duration || 0),
+      how: String(form.how || "").trim(),
+      why: String(form.why || "").trim(),
+      notes: String(form.notes || "").trim(),
+      status: String(form.status || "prévu"),
       travelBefore: Number(form.travelBefore || 0),
       travelAfter: Number(form.travelAfter || 0),
     };
 
-    const error = validateForm(payload);
+    const error = validateRdv(payload);
     if (error) {
       alert(error);
       return;
@@ -109,14 +110,13 @@ function App() {
         prev.map((rdv) => (rdv.id === editingId ? { ...rdv, ...payload } : rdv))
       );
     } else {
-      setRdvs((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          createdAt: new Date().toISOString(),
-          ...payload,
-        },
-      ]);
+      const newRdv = {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        createdAt: new Date().toISOString(),
+        ...payload,
+      };
+
+      setRdvs((prev) => [...prev, newRdv]);
     }
 
     resetForm();
@@ -124,7 +124,10 @@ function App() {
 
   function deleteRdv(id) {
     setRdvs((prev) => prev.filter((rdv) => rdv.id !== id));
-    if (editingId === id) resetForm();
+
+    if (editingId === id) {
+      resetForm();
+    }
   }
 
   function editRdv(rdv) {
@@ -143,6 +146,7 @@ function App() {
       travelBefore: Number(rdv.travelBefore ?? 0),
       travelAfter: Number(rdv.travelAfter ?? 0),
     });
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -174,7 +178,7 @@ function App() {
         }
 
         const sanitized = parsed.map((item, index) => ({
-          id: item.id ?? Date.now() + index,
+          id: item.id ?? `import-${Date.now()}-${index}`,
           createdAt: item.createdAt ?? new Date().toISOString(),
           what: String(item.what ?? ""),
           who: String(item.who ?? ""),
@@ -203,20 +207,83 @@ function App() {
     reader.readAsText(file);
   }
 
+  function getDateTimeFromRdv(rdv) {
+    return new Date(`${rdv.whenDate}T${rdv.whenStart}`);
+  }
+
+  function getEffectiveStart(rdv) {
+    const start = getDateTimeFromRdv(rdv);
+    start.setMinutes(start.getMinutes() - Number(rdv.travelBefore || 0));
+    return start;
+  }
+
+  function getEffectiveEnd(rdv) {
+    const end = getDateTimeFromRdv(rdv);
+    end.setMinutes(
+      end.getMinutes() +
+        Number(rdv.duration || 0) +
+        Number(rdv.travelAfter || 0)
+    );
+    return end;
+  }
+
+  function hasConflict(current) {
+    const currentStart = getEffectiveStart(current);
+    const currentEnd = getEffectiveEnd(current);
+
+    return rdvs.some((other) => {
+      if (other.id === current.id) return false;
+      if (other.whenDate !== current.whenDate) return false;
+
+      const otherStart = getEffectiveStart(other);
+      const otherEnd = getEffectiveEnd(other);
+
+      return currentStart < otherEnd && currentEnd > otherStart;
+    });
+  }
+
   function getStartOfWeek(date) {
-    const result = new Date(date);
-    const day = result.getDay();
+    const d = new Date(date);
+    const day = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
-    result.setDate(result.getDate() + diff);
-    result.setHours(0, 0, 0, 0);
-    return result;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
   }
 
   function getEndOfWeek(date) {
-    const end = new Date(getStartOfWeek(date));
-    end.setDate(end.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    return end;
+    const d = getStartOfWeek(date);
+    d.setDate(d.getDate() + 6);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }
+
+  function isInCurrentView(rdv) {
+    const rdvDate = new Date(`${rdv.whenDate}T12:00:00`);
+    if (Number.isNaN(rdvDate.getTime())) return false;
+
+    if (viewMode === "jour") {
+      return rdvDate.toDateString() === currentDate.toDateString();
+    }
+
+    if (viewMode === "semaine") {
+      const start = getStartOfWeek(currentDate);
+      const end = getEndOfWeek(currentDate);
+      return rdvDate >= start && rdvDate <= end;
+    }
+
+    if (viewMode === "mois") {
+      return (
+        rdvDate.getMonth() === currentDate.getMonth() &&
+        rdvDate.getFullYear() === currentDate.getFullYear()
+      );
+    }
+
+    if (viewMode === "annee") {
+      return rdvDate.getFullYear() === currentDate.getFullYear();
+    }
+
+    return true;
   }
 
   function changeDate(step) {
@@ -260,69 +327,6 @@ function App() {
     return String(currentDate.getFullYear());
   }
 
-  function isInCurrentView(rdv) {
-    const rdvDate = new Date(`${rdv.whenDate}T12:00:00`);
-    if (Number.isNaN(rdvDate.getTime())) return false;
-
-    if (viewMode === "jour") {
-      return rdvDate.toDateString() === currentDate.toDateString();
-    }
-
-    if (viewMode === "semaine") {
-      const start = getStartOfWeek(currentDate);
-      const end = getEndOfWeek(currentDate);
-      return rdvDate >= start && rdvDate <= end;
-    }
-
-    if (viewMode === "mois") {
-      return (
-        rdvDate.getMonth() === currentDate.getMonth() &&
-        rdvDate.getFullYear() === currentDate.getFullYear()
-      );
-    }
-
-    if (viewMode === "annee") {
-      return rdvDate.getFullYear() === currentDate.getFullYear();
-    }
-
-    return true;
-  }
-
-  function getDateTimeFromRdv(rdv) {
-    return new Date(`${rdv.whenDate}T${rdv.whenStart}`);
-  }
-
-  function getEffectiveStart(rdv) {
-    const start = getDateTimeFromRdv(rdv);
-    start.setMinutes(start.getMinutes() - Number(rdv.travelBefore || 0));
-    return start;
-  }
-
-  function getEffectiveEnd(rdv) {
-    const end = getDateTimeFromRdv(rdv);
-    end.setMinutes(
-      end.getMinutes() +
-        Number(rdv.duration || 0) +
-        Number(rdv.travelAfter || 0)
-    );
-    return end;
-  }
-
-  function hasConflict(current) {
-    const currentStart = getEffectiveStart(current);
-    const currentEnd = getEffectiveEnd(current);
-
-    return rdvs.some((other) => {
-      if (other.id === current.id) return false;
-      if (other.whenDate !== current.whenDate) return false;
-
-      const otherStart = getEffectiveStart(other);
-      const otherEnd = getEffectiveEnd(other);
-
-      return currentStart < otherEnd && currentEnd > otherStart;
-    });
-  }
-
   const filteredRdvs = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -360,7 +364,7 @@ function App() {
       ),
       conflicts: filteredRdvs.filter((rdv) => hasConflict(rdv)).length,
     };
-  }, [filteredRdvs]);
+  }, [filteredRdvs, rdvs]);
 
   const statusColors = {
     prévu: {
@@ -420,7 +424,6 @@ function App() {
     },
     card: {
       background: "rgba(255,255,255,0.92)",
-      backdropFilter: "blur(10px)",
       borderRadius: 22,
       padding: 20,
       boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
@@ -432,7 +435,6 @@ function App() {
       marginBottom: 6,
       fontSize: 22,
       fontWeight: 800,
-      color: "#0f172a",
     },
     sectionText: {
       marginTop: 0,
@@ -453,7 +455,6 @@ function App() {
       background: "#ffffff",
       marginTop: 8,
       fontSize: 14,
-      outline: "none",
       boxSizing: "border-box",
     },
     textarea: {
@@ -465,7 +466,6 @@ function App() {
       background: "#ffffff",
       marginTop: 8,
       fontSize: 14,
-      outline: "none",
       boxSizing: "border-box",
       resize: "vertical",
     },
@@ -484,7 +484,6 @@ function App() {
       cursor: "pointer",
       marginRight: 10,
       marginBottom: 10,
-      boxShadow: "0 8px 18px rgba(37,99,235,0.25)",
     },
     buttonSecondary: {
       padding: "12px 16px",
@@ -515,15 +514,13 @@ function App() {
     statBox: {
       borderRadius: 18,
       padding: 16,
-      background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+      background: "#ffffff",
       border: "1px solid #e2e8f0",
-      boxShadow: "0 8px 22px rgba(15, 23, 42, 0.04)",
     },
     statValue: {
       fontSize: 28,
       fontWeight: 800,
       marginTop: 6,
-      color: "#0f172a",
     },
     topNav: {
       display: "flex",
@@ -542,9 +539,8 @@ function App() {
     rdvCard: {
       borderRadius: 20,
       padding: 18,
-      background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+      background: "#ffffff",
       border: "1px solid #e2e8f0",
-      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)",
       marginBottom: 14,
     },
     rdvHeader: {
@@ -568,7 +564,7 @@ function App() {
       marginBottom: 12,
     },
     metaBox: {
-      background: "#ffffff",
+      background: "#f8fafc",
       border: "1px solid #e2e8f0",
       borderRadius: 14,
       padding: 12,
@@ -591,8 +587,8 @@ function App() {
         <div style={styles.hero}>
           <h1 style={styles.heroTitle}>Gestion des rendez-vous</h1>
           <p style={styles.heroText}>
-            Application moderne avec import/export JSON, vues temporelles,
-            gestion des trajets et détection des conflits.
+            Application moderne avec ajout fiable, import/export JSON,
+            vues temporelles, trajets et conflits.
           </p>
         </div>
 
@@ -601,63 +597,33 @@ function App() {
             {editingId ? "Modifier un rendez-vous" : "Créer un rendez-vous"}
           </h2>
           <p style={styles.sectionText}>
-            Le titre est généré automatiquement avec la logique QQOQCP.
+            Le titre est généré automatiquement à partir de QQOQCP.
           </p>
 
           <div style={styles.grid}>
             <div>
               <label style={styles.label}>Quoi *</label>
-              <input
-                style={styles.input}
-                name="what"
-                value={form.what}
-                onChange={handleChange}
-                placeholder="Ex : Visite client"
-              />
+              <input style={styles.input} name="what" value={form.what} onChange={handleChange} />
             </div>
 
             <div>
               <label style={styles.label}>Qui</label>
-              <input
-                style={styles.input}
-                name="who"
-                value={form.who}
-                onChange={handleChange}
-                placeholder="Nom du contact"
-              />
+              <input style={styles.input} name="who" value={form.who} onChange={handleChange} />
             </div>
 
             <div>
               <label style={styles.label}>Où</label>
-              <input
-                style={styles.input}
-                name="where"
-                value={form.where}
-                onChange={handleChange}
-                placeholder="Adresse ou lieu"
-              />
+              <input style={styles.input} name="where" value={form.where} onChange={handleChange} />
             </div>
 
             <div>
               <label style={styles.label}>Comment</label>
-              <input
-                style={styles.input}
-                name="how"
-                value={form.how}
-                onChange={handleChange}
-                placeholder="Présentiel, visio, téléphone"
-              />
+              <input style={styles.input} name="how" value={form.how} onChange={handleChange} />
             </div>
 
             <div>
               <label style={styles.label}>Pourquoi</label>
-              <input
-                style={styles.input}
-                name="why"
-                value={form.why}
-                onChange={handleChange}
-                placeholder="Objectif"
-              />
+              <input style={styles.input} name="why" value={form.why} onChange={handleChange} />
             </div>
 
             <div>
@@ -738,7 +704,6 @@ function App() {
               name="notes"
               value={form.notes}
               onChange={handleChange}
-              placeholder="Informations complémentaires"
             />
           </div>
 
@@ -748,21 +713,26 @@ function App() {
           </div>
 
           <div style={{ marginTop: 18 }}>
-            <button style={styles.buttonPrimary} onClick={addOrUpdateRdv}>
+            <button type="button" style={styles.buttonPrimary} onClick={addOrUpdateRdv}>
               {editingId ? "Enregistrer les modifications" : "Ajouter le rendez-vous"}
             </button>
-            <button style={styles.buttonSecondary} onClick={resetForm}>
+
+            <button type="button" style={styles.buttonSecondary} onClick={resetForm}>
               Réinitialiser
             </button>
-            <button style={styles.buttonSecondary} onClick={exportData}>
+
+            <button type="button" style={styles.buttonSecondary} onClick={exportData}>
               Exporter JSON
             </button>
+
             <button
+              type="button"
               style={styles.buttonSecondary}
               onClick={() => fileInputRef.current?.click()}
             >
               Importer JSON
             </button>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -775,18 +745,16 @@ function App() {
 
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Navigation</h2>
-          <p style={styles.sectionText}>
-            Navigue par jour, semaine, mois ou année.
-          </p>
+          <p style={styles.sectionText}>Navigue par jour, semaine, mois ou année.</p>
 
           <div style={styles.topNav}>
-            <button style={styles.buttonSecondary} onClick={() => changeDate(-1)}>
+            <button type="button" style={styles.buttonSecondary} onClick={() => changeDate(-1)}>
               ◀ Précédent
             </button>
-            <button style={styles.buttonSecondary} onClick={() => changeDate(1)}>
+            <button type="button" style={styles.buttonSecondary} onClick={() => changeDate(1)}>
               Suivant ▶
             </button>
-            <button style={styles.buttonSecondary} onClick={goToday}>
+            <button type="button" style={styles.buttonSecondary} onClick={goToday}>
               Aujourd’hui
             </button>
           </div>
@@ -795,6 +763,7 @@ function App() {
             {["jour", "semaine", "mois", "annee"].map((mode) => (
               <button
                 key={mode}
+                type="button"
                 style={{
                   ...styles.buttonSecondary,
                   background:
@@ -803,10 +772,6 @@ function App() {
                       : "#ffffff",
                   color: viewMode === mode ? "#ffffff" : "#0f172a",
                   border: viewMode === mode ? "none" : "1px solid #cbd5e1",
-                  boxShadow:
-                    viewMode === mode
-                      ? "0 8px 18px rgba(37,99,235,0.2)"
-                      : "none",
                 }}
                 onClick={() => setViewMode(mode)}
               >
@@ -821,21 +786,16 @@ function App() {
             ))}
           </div>
 
-          <div style={{ marginTop: 8 }}>
-            <p style={{ margin: "6px 0" }}>
-              <strong>Mode actif :</strong> {viewMode}
-            </p>
-            <p style={{ margin: "6px 0" }}>
-              <strong>Période affichée :</strong> {getPeriodLabel()}
-            </p>
-          </div>
+          <p>
+            <strong>Mode actif :</strong> {viewMode}
+          </p>
+          <p>
+            <strong>Période affichée :</strong> {getPeriodLabel()}
+          </p>
         </div>
 
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Filtres et résumé</h2>
-          <p style={styles.sectionText}>
-            Recherche rapide, filtre par statut et conflits.
-          </p>
 
           <div style={styles.filterRow}>
             <div>
@@ -864,14 +824,7 @@ function App() {
             </div>
 
             <div style={{ display: "flex", alignItems: "end" }}>
-              <label
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  fontWeight: 700,
-                }}
-              >
+              <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
                 <input
                   type="checkbox"
                   checked={showOnlyConflicts}
@@ -887,17 +840,14 @@ function App() {
               <div style={styles.badge}>Rendez-vous</div>
               <div style={styles.statValue}>{stats.count}</div>
             </div>
-
             <div style={styles.statBox}>
               <div style={styles.badge}>Temps RDV</div>
               <div style={styles.statValue}>{stats.duration} min</div>
             </div>
-
             <div style={styles.statBox}>
               <div style={styles.badge}>Temps trajet</div>
               <div style={styles.statValue}>{stats.travel} min</div>
             </div>
-
             <div style={styles.statBox}>
               <div style={styles.badge}>Conflits</div>
               <div style={styles.statValue}>{stats.conflicts}</div>
@@ -907,9 +857,6 @@ function App() {
 
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Liste des rendez-vous</h2>
-          <p style={styles.sectionText}>
-            Vue chronologique avec statut, conflit et détails.
-          </p>
 
           {filteredRdvs.length === 0 ? (
             <p style={styles.subtle}>Aucun rendez-vous sur cette période.</p>
@@ -929,7 +876,6 @@ function App() {
                       borderRadius: 999,
                       fontSize: 12,
                       fontWeight: 800,
-                      textTransform: "capitalize",
                     }}
                   >
                     {rdv.status}
@@ -1003,13 +949,11 @@ function App() {
                 )}
 
                 <div>
-                  <button
-                    style={styles.buttonSecondary}
-                    onClick={() => editRdv(rdv)}
-                  >
+                  <button type="button" style={styles.buttonSecondary} onClick={() => editRdv(rdv)}>
                     Modifier
                   </button>
                   <button
+                    type="button"
                     style={{
                       ...styles.buttonSecondary,
                       borderColor: "#fca5a5",
