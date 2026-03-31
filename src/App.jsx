@@ -105,26 +105,35 @@ function App() {
         };
       }
       const parsed = JSON.parse(raw);
-      return {
-        events: Array.isArray(parsed.events) ? parsed.events : [],
-        structure:
-          parsed.structure && typeof parsed.structure === "object"
-            ? parsed.structure
-            : DEFAULT_STRUCTURE,
-        models: Array.isArray(parsed.models) && parsed.models.length > 0 ? parsed.models : DEFAULT_MODELS,
-      };
-    } catch {
-      return {
-        events: [],
-        structure: DEFAULT_STRUCTURE,
-        models: DEFAULT_MODELS,
-      };
-    }
-  });
+
+    return {
+      events: Array.isArray(parsed.events) ? parsed.events : [],
+      structure:
+        parsed.structure && typeof parsed.structure === "object"
+          ? parsed.structure
+          : DEFAULT_STRUCTURE,
+      models:
+        Array.isArray(parsed.models) && parsed.models.length > 0
+          ? parsed.models
+          : DEFAULT_MODELS,
+    };
+  } catch {
+    return {
+      events: [],
+      structure: DEFAULT_STRUCTURE,
+      models: DEFAULT_MODELS,
+    };
+  }
+});
 
   const [activeMenu, setActiveMenu] = useState("agenda"); // agenda | event | models | structure | stats
   const [eventForm, setEventForm] = useState(INITIAL_EVENT_FORM);
   const [modelForm, setModelForm] = useState(INITIAL_MODEL_FORM);
+  const [isMobile, setIsMobile] = useState(() =>
+  typeof window !== "undefined" ? window.innerWidth <= 768 : false
+);
+  const [agendaMobileTab, setAgendaMobileTab] = useState("liste"); // liste | timeline | filtres
+
 
   const [editingEventId, setEditingEventId] = useState(null);
   const [editingSeriesGroupId, setEditingSeriesGroupId] = useState(null);
@@ -176,6 +185,15 @@ function App() {
       window.removeEventListener("click", closeMenu);
       window.removeEventListener("scroll", closeMenu, true);
     };
+  }, []);
+
+ useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 768);
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   function uid(prefix = "id") {
@@ -1300,110 +1318,153 @@ function App() {
   const styles = {
     page: {
       minHeight: "100vh",
-      background: "linear-gradient(180deg, #eef2ff 0%, #f8fafc 35%, #f8fafc 100%)",
-      padding: 20,
+      background:
+        "radial-gradient(circle at top left, rgba(59,130,246,0.12) 0%, rgba(124,58,237,0.08) 25%, #f8fafc 55%, #f8fafc 100%)",
+      padding: isMobile ? "12px 12px 92px" : 20,
       fontFamily:
         'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       color: "#0f172a",
     },
-    wrapper: { maxWidth: 1500, margin: "0 auto" },
+    wrapper: {
+      maxWidth: 1500,
+      margin: "0 auto",
+    },
     hero: {
       background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
-      borderRadius: 24,
-      padding: 24,
+      borderRadius: isMobile ? 20 : 28,
+      padding: isMobile ? 18 : 26,
       color: "white",
-      boxShadow: "0 18px 45px rgba(37, 99, 235, 0.25)",
-      marginBottom: 18,
+      boxShadow: "0 18px 45px rgba(37, 99, 235, 0.22)",
+      marginBottom: 16,
+      position: "relative",
+      overflow: "hidden",
     },
-    heroTitle: { margin: 0, fontSize: 32, fontWeight: 800 },
+    heroTitle: {
+      margin: 0,
+      fontSize: isMobile ? 24 : 32,
+      fontWeight: 900,
+      lineHeight: 1.05,
+    },
     heroText: {
-      marginTop: 8,
+      marginTop: 10,
       marginBottom: 0,
       color: "rgba(255,255,255,0.92)",
       lineHeight: 1.5,
+      fontSize: isMobile ? 14 : 15,
+      maxWidth: 900,
     },
     menuBar: {
       display: "flex",
-      flexWrap: "wrap",
+      flexWrap: isMobile ? "nowrap" : "wrap",
+      overflowX: isMobile ? "auto" : "visible",
       gap: 10,
-      marginBottom: 18,
+      marginBottom: 16,
+      paddingBottom: isMobile ? 4 : 0,
+      scrollbarWidth: "none",
     },
     menuButton: {
-      padding: "12px 16px",
-      borderRadius: 14,
+      padding: isMobile ? "12px 14px" : "12px 16px",
+      borderRadius: 16,
       border: "1px solid #cbd5e1",
       background: "#ffffff",
       color: "#0f172a",
       fontWeight: 800,
       cursor: "pointer",
+      whiteSpace: "nowrap",
+      flex: isMobile ? "0 0 auto" : "initial",
+      boxShadow: "0 6px 16px rgba(15,23,42,0.05)",
     },
     card: {
       background: "rgba(255,255,255,0.96)",
-      borderRadius: 22,
-      padding: 20,
-      boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
-      border: "1px solid rgba(255,255,255,0.7)",
-      marginBottom: 18,
+      backdropFilter: "blur(8px)",
+      borderRadius: isMobile ? 18 : 24,
+      padding: isMobile ? 16 : 20,
+      boxShadow: "0 12px 32px rgba(15, 23, 42, 0.08)",
+      border: "1px solid rgba(255,255,255,0.75)",
+      marginBottom: 16,
     },
-    sectionTitle: { margin: 0, marginBottom: 6, fontSize: 22, fontWeight: 800 },
-    sectionText: { marginTop: 0, marginBottom: 16, color: "#64748b", fontSize: 14 },
+    sectionTitle: {
+      margin: 0,
+      marginBottom: 6,
+      fontSize: isMobile ? 19 : 22,
+      fontWeight: 900,
+      letterSpacing: -0.2,
+    },
+    sectionText: {
+      marginTop: 0,
+      marginBottom: 16,
+      color: "#64748b",
+      fontSize: 14,
+      lineHeight: 1.5,
+    },
     grid: {
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+      gridTemplateColumns: isMobile
+        ? "1fr"
+        : "repeat(auto-fit, minmax(230px, 1fr))",
       gap: 14,
     },
     input: {
       width: "100%",
-      padding: "12px 14px",
-      borderRadius: 14,
+      padding: isMobile ? "13px 14px" : "12px 14px",
+      borderRadius: 16,
       border: "1px solid #dbeafe",
       background: "#ffffff",
       marginTop: 8,
       fontSize: 14,
       boxSizing: "border-box",
+      outline: "none",
+      boxShadow: "inset 0 1px 2px rgba(15,23,42,0.03)",
     },
     textarea: {
       width: "100%",
-      minHeight: 100,
+      minHeight: 110,
       padding: "12px 14px",
-      borderRadius: 14,
+      borderRadius: 16,
       border: "1px solid #dbeafe",
       background: "#ffffff",
       marginTop: 8,
       fontSize: 14,
       boxSizing: "border-box",
       resize: "vertical",
+      outline: "none",
     },
-    label: { fontSize: 13, fontWeight: 700, color: "#334155" },
+    label: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: "#334155",
+    },
     buttonPrimary: {
-      padding: "12px 16px",
-      borderRadius: 14,
+      padding: isMobile ? "13px 16px" : "12px 16px",
+      borderRadius: 16,
       border: "none",
       background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
       color: "white",
+      fontWeight: 900,
+      cursor: "pointer",
+      marginRight: 10,
+      marginBottom: 10,
+      boxShadow: "0 10px 22px rgba(37,99,235,0.18)",
+    },
+    buttonSecondary: {
+      padding: isMobile ? "13px 14px" : "12px 16px",
+      borderRadius: 16,
+      border: "1px solid #cbd5e1",
+      background: "#ffffff",
+      color: "#0f172a",
       fontWeight: 800,
       cursor: "pointer",
       marginRight: 10,
       marginBottom: 10,
-    },
-    buttonSecondary: {
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: "1px solid #cbd5e1",
-      background: "#ffffff",
-      color: "#0f172a",
-      fontWeight: 700,
-      cursor: "pointer",
-      marginRight: 10,
-      marginBottom: 10,
+      boxShadow: "0 6px 16px rgba(15,23,42,0.05)",
     },
     buttonDanger: {
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: "1px solid #fca5a5",
+      padding: isMobile ? "13px 14px" : "12px 16px",
+      borderRadius: 16,
+      border: "1px solid #fecaca",
       background: "#fff",
       color: "#b91c1c",
-      fontWeight: 700,
+      fontWeight: 800,
       cursor: "pointer",
       marginRight: 10,
       marginBottom: 10,
@@ -1420,18 +1481,21 @@ function App() {
     },
     statsGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-      gap: 14,
+      gridTemplateColumns: isMobile
+        ? "repeat(2, minmax(0, 1fr))"
+        : "repeat(auto-fit, minmax(180px, 1fr))",
+      gap: 12,
     },
     statBox: {
       borderRadius: 18,
-      padding: 16,
+      padding: isMobile ? 14 : 16,
       background: "#ffffff",
       border: "1px solid #e2e8f0",
+      boxShadow: "0 8px 18px rgba(15,23,42,0.04)",
     },
     statValue: {
-      fontSize: 24,
-      fontWeight: 800,
+      fontSize: isMobile ? 20 : 24,
+      fontWeight: 900,
       marginTop: 6,
     },
     topNav: {
@@ -1443,18 +1507,21 @@ function App() {
     },
     filterRow: {
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gridTemplateColumns: isMobile
+        ? "1fr"
+        : "repeat(auto-fit, minmax(220px, 1fr))",
       gap: 14,
       alignItems: "end",
       marginBottom: 16,
     },
     eventCard: {
       borderRadius: 20,
-      padding: 18,
+      padding: isMobile ? 16 : 18,
       background: "#ffffff",
       border: "1px solid #e2e8f0",
       marginBottom: 14,
       position: "relative",
+      boxShadow: "0 10px 28px rgba(15,23,42,0.05)",
     },
     eventHeader: {
       display: "flex",
@@ -1466,12 +1533,15 @@ function App() {
     eventTitle: {
       marginTop: 0,
       marginBottom: 8,
-      fontSize: 18,
-      fontWeight: 800,
+      fontSize: isMobile ? 17 : 18,
+      fontWeight: 900,
+      lineHeight: 1.25,
     },
     metaGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+      gridTemplateColumns: isMobile
+        ? "1fr 1fr"
+        : "repeat(auto-fit, minmax(180px, 1fr))",
       gap: 10,
       marginTop: 12,
       marginBottom: 12,
@@ -1483,11 +1553,19 @@ function App() {
       padding: 12,
       fontSize: 14,
     },
-    subtle: { color: "#64748b", fontSize: 14 },
-    conflict: { color: "#b91c1c", fontWeight: 800, margin: "8px 0" },
+    subtle: {
+      color: "#64748b",
+      fontSize: 14,
+      lineHeight: 1.5,
+    },
+    conflict: {
+      color: "#b91c1c",
+      fontWeight: 800,
+      margin: "8px 0",
+    },
     pickerWrap: {
       display: "grid",
-      gridTemplateColumns: "minmax(220px, 320px)",
+      gridTemplateColumns: isMobile ? "1fr" : "minmax(220px, 320px)",
       gap: 12,
       marginTop: 10,
       marginBottom: 4,
@@ -1518,11 +1596,13 @@ function App() {
       borderRadius: 999,
       background: "#2563eb",
     },
-    dayTimelineWrap: { minWidth: 760 },
+    dayTimelineWrap: {
+      minWidth: isMobile ? 100 : 760,
+    },
     dayTimelineGrid: {
       position: "relative",
       display: "grid",
-      gridTemplateColumns: "72px 1fr",
+      gridTemplateColumns: isMobile ? "56px 1fr" : "72px 1fr",
       minHeight: 1440,
     },
     timeColumn: {
@@ -1532,7 +1612,7 @@ function App() {
     timeSlot: {
       height: 60,
       borderBottom: "1px solid #eef2f7",
-      padding: "4px 8px",
+      padding: isMobile ? "4px 6px" : "4px 8px",
       fontSize: 12,
       color: "#64748b",
       boxSizing: "border-box",
@@ -1540,9 +1620,12 @@ function App() {
     dayCanvas: {
       position: "relative",
       minHeight: 1440,
-      background: "repeating-linear-gradient(to bottom, #ffffff 0px, #ffffff 59px, #eef2f7 60px)",
+      background:
+        "repeating-linear-gradient(to bottom, #ffffff 0px, #ffffff 59px, #eef2f7 60px)",
     },
-    weekTimelineWrap: { minWidth: 1120 },
+    weekTimelineWrap: {
+      minWidth: isMobile ? 860 : 1120,
+    },
     weekHeader: {
       display: "grid",
       gridTemplateColumns: "72px repeat(7, minmax(140px, 1fr))",
@@ -1556,7 +1639,7 @@ function App() {
       padding: 12,
       borderRight: "1px solid #e2e8f0",
       fontSize: 13,
-      fontWeight: 700,
+      fontWeight: 800,
       color: "#334155",
       textAlign: "center",
       boxSizing: "border-box",
@@ -1575,24 +1658,26 @@ function App() {
       position: "relative",
       minHeight: 1440,
       borderRight: "1px solid #eef2f7",
-      background: "repeating-linear-gradient(to bottom, #ffffff 0px, #ffffff 59px, #eef2f7 60px)",
+      background:
+        "repeating-linear-gradient(to bottom, #ffffff 0px, #ffffff 59px, #eef2f7 60px)",
     },
     timelineEvent: {
       position: "absolute",
-      left: 8,
-      right: 8,
+      left: isMobile ? 4 : 8,
+      right: isMobile ? 4 : 8,
       borderRadius: 14,
-      padding: 10,
+      padding: isMobile ? 8 : 10,
       boxSizing: "border-box",
       overflow: "hidden",
       boxShadow: "0 8px 20px rgba(37, 99, 235, 0.12)",
       border: "1px solid rgba(37,99,235,0.15)",
-      background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.12) 100%)",
+      background:
+        "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.12) 100%)",
       color: "#0f172a",
     },
     timelineEventTitle: {
-      fontSize: 13,
-      fontWeight: 800,
+      fontSize: isMobile ? 12 : 13,
+      fontWeight: 900,
       marginBottom: 4,
       lineHeight: 1.2,
     },
@@ -1603,19 +1688,22 @@ function App() {
     },
     monthGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(7, minmax(120px, 1fr))",
+      gridTemplateColumns: isMobile
+        ? "repeat(2, minmax(0, 1fr))"
+        : "repeat(7, minmax(120px, 1fr))",
       gap: 10,
     },
     monthDayName: {
       fontSize: 12,
-      fontWeight: 800,
+      fontWeight: 900,
       color: "#475569",
       textTransform: "uppercase",
       letterSpacing: 0.5,
       padding: "4px 8px",
+      textAlign: "center",
     },
     monthCell: {
-      minHeight: 130,
+      minHeight: isMobile ? 112 : 130,
       borderRadius: 18,
       border: "1px solid #e2e8f0",
       background: "#fff",
@@ -1625,11 +1713,15 @@ function App() {
       display: "flex",
       flexDirection: "column",
       gap: 8,
+      boxShadow: "0 8px 18px rgba(15,23,42,0.04)",
     },
-    monthCellMuted: { background: "#f8fafc", color: "#94a3b8" },
+    monthCellMuted: {
+      background: "#f8fafc",
+      color: "#94a3b8",
+    },
     monthCellToday: {
       border: "2px solid #2563eb",
-      boxShadow: "0 8px 20px rgba(37,99,235,0.08)",
+      boxShadow: "0 8px 20px rgba(37,99,235,0.10)",
     },
     monthCellHeader: {
       display: "flex",
@@ -1637,14 +1729,17 @@ function App() {
       alignItems: "center",
       gap: 8,
     },
-    monthDayNumber: { fontWeight: 800, fontSize: 14 },
+    monthDayNumber: {
+      fontWeight: 900,
+      fontSize: 14,
+    },
     monthCountBadge: {
       fontSize: 11,
       padding: "4px 8px",
       borderRadius: 999,
       background: "#eef2ff",
       color: "#4338ca",
-      fontWeight: 800,
+      fontWeight: 900,
     },
     monthEventMini: {
       fontSize: 12,
@@ -1658,7 +1753,9 @@ function App() {
     },
     yearGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+      gridTemplateColumns: isMobile
+        ? "1fr"
+        : "repeat(auto-fit, minmax(260px, 1fr))",
       gap: 14,
     },
     yearMonthCard: {
@@ -1667,6 +1764,7 @@ function App() {
       background: "#fff",
       padding: 14,
       cursor: "pointer",
+      boxShadow: "0 8px 18px rgba(15,23,42,0.04)",
     },
     yearMonthTitle: {
       display: "flex",
@@ -1686,7 +1784,11 @@ function App() {
       background: "#f1f5f9",
       border: "1px solid #e2e8f0",
     },
-    timelineEmpty: { padding: 18, color: "#64748b", fontSize: 14 },
+    timelineEmpty: {
+      padding: 18,
+      color: "#64748b",
+      fontSize: 14,
+    },
     inlineBadge: {
       display: "inline-flex",
       alignItems: "center",
@@ -1698,15 +1800,23 @@ function App() {
       marginRight: 8,
       marginBottom: 8,
     },
-    listCompact: { display: "grid", gap: 10 },
-    divider: { height: 1, background: "#e2e8f0", margin: "18px 0" },
+    listCompact: {
+      display: "grid",
+      gap: 10,
+    },
+    divider: {
+      height: 1,
+      background: "#e2e8f0",
+      margin: "18px 0",
+    },
     contextButton: {
       border: "1px solid #cbd5e1",
       background: "#fff",
       borderRadius: 12,
       padding: "8px 12px",
       cursor: "pointer",
-      fontWeight: 700,
+      fontWeight: 800,
+      boxShadow: "0 6px 16px rgba(15,23,42,0.05)",
     },
     contextMenu: {
       position: "fixed",
@@ -1727,7 +1837,83 @@ function App() {
       borderRadius: 10,
       cursor: "pointer",
       fontSize: 14,
-      fontWeight: 600,
+      fontWeight: 700,
+    },
+    mobileSegment: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3, 1fr)",
+      gap: 8,
+      marginBottom: 14,
+    },
+    mobileSegmentButton: {
+      padding: "12px 10px",
+      borderRadius: 14,
+      border: "1px solid #cbd5e1",
+      background: "#fff",
+      fontWeight: 800,
+      fontSize: 13,
+      cursor: "pointer",
+      boxShadow: "0 6px 16px rgba(15,23,42,0.05)",
+    },
+    mobileBottomBar: {
+      position: "fixed",
+      left: 12,
+      right: 12,
+      bottom: 12,
+      display: "grid",
+      gridTemplateColumns: "repeat(5, 1fr)",
+      gap: 8,
+      padding: 8,
+      borderRadius: 22,
+      background: "rgba(255,255,255,0.92)",
+      backdropFilter: "blur(12px)",
+      border: "1px solid rgba(226,232,240,0.9)",
+      boxShadow: "0 18px 38px rgba(15,23,42,0.14)",
+      zIndex: 999,
+    },
+    mobileBottomButton: {
+      border: "none",
+      background: "transparent",
+      borderRadius: 14,
+      padding: "10px 6px",
+      fontSize: 11,
+      fontWeight: 800,
+      cursor: "pointer",
+      color: "#334155",
+    },
+    mobileFab: {
+      position: "fixed",
+      right: 16,
+      bottom: 92,
+      width: 58,
+      height: 58,
+      borderRadius: 999,
+      border: "none",
+      background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
+      color: "#fff",
+      fontSize: 30,
+      lineHeight: 1,
+      fontWeight: 900,
+      cursor: "pointer",
+      boxShadow: "0 18px 30px rgba(37,99,235,0.28)",
+      zIndex: 998,
+    },
+    quickStatsStrip: {
+      display: "grid",
+      gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)",
+      gap: 10,
+      marginBottom: 14,
+    },
+    quickStatCard: {
+      borderRadius: 16,
+      padding: 12,
+      background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+      border: "1px solid #e2e8f0",
+    },
+    quickStatValue: {
+      fontSize: 20,
+      fontWeight: 900,
+      marginTop: 4,
     },
   };
 
@@ -2012,7 +2198,93 @@ function App() {
     );
   }
 
-  function renderTimeline() {
+  function renderMobileTimelineCards() {
+    const grouped = timelineEvents.reduce((acc, evt) => {
+      const key = evt.date;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(evt);
+      return acc;
+    }, {});
+
+    const sortedDates = Object.keys(grouped).sort();
+
+    if (sortedDates.length === 0) {
+      return <div style={styles.timelineEmpty}>Aucun élément sur cette période.</div>;
+    }
+
+    return (
+      <div style={{ display: "grid", gap: 12 }}>
+        {sortedDates.map((dateKey) => (
+          <div
+            key={dateKey}
+            style={{
+              border: "1px solid #e2e8f0",
+              borderRadius: 18,
+              padding: 12,
+              background: "#fff",
+              boxShadow: "0 8px 18px rgba(15,23,42,0.04)",
+            }}
+          >
+            <div style={{ marginBottom: 10 }}>
+              <span style={styles.badge}>{dateKey}</span>
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {grouped[dateKey]
+                .sort((a, b) => getDateTimeFromEvent(a) - getDateTimeFromEvent(b))
+                .map((evt) => {
+                  const start = getEffectiveStart(evt);
+                  const end = getEffectiveEnd(evt);
+
+                  return (
+                    <div
+                      key={evt.id}
+                      style={{
+                        borderRadius: 16,
+                        padding: 12,
+                        border: "1px solid #e2e8f0",
+                        background: hasConflict(evt) ? "#fef2f2" : "#f8fafc",
+                      }}
+                    >
+                      <div style={{ fontWeight: 900, marginBottom: 4 }}>{evt.title}</div>
+                      <div style={{ fontSize: 13, color: "#475569", marginBottom: 6 }}>
+                        {formatRangeHour(start, end)}
+                      </div>
+
+                      <div style={{ marginBottom: 6 }}>
+                        <span style={{ ...styles.inlineBadge, background: "#eef2ff", color: "#4338ca" }}>
+                          {evt.domain}
+                        </span>
+                        <span style={{ ...styles.inlineBadge, background: "#f8fafc", color: "#334155" }}>
+                          {evt.typeLabel}
+                        </span>
+                        {evt.subTypeLabel ? (
+                          <span style={{ ...styles.inlineBadge, background: "#fff7ed", color: "#9a3412" }}>
+                            {evt.subTypeLabel}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {evt.place ? (
+                        <div style={{ fontSize: 13, color: "#475569" }}>📍 {evt.place}</div>
+                      ) : null}
+                      {evt.withWho ? (
+                        <div style={{ fontSize: 13, color: "#475569", marginTop: 4 }}>👤 {evt.withWho}</div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+    function renderTimeline() {
+    if (isMobile && (viewMode === "jour" || viewMode === "semaine")) {
+      return renderMobileTimelineCards();
+    }
+
     if (viewMode === "jour") return renderDayTimeline();
     if (viewMode === "semaine") return renderWeekTimeline();
     if (viewMode === "mois") return renderMonthTimeline();
@@ -2141,22 +2413,72 @@ function App() {
     );
   }
 
-  function renderMenu() {
+    function renderMenu() {
     const items = [
-      { key: "agenda", label: "Agenda" },
+      { key: "agenda", label: "Agenda", icon: "🗓️" },
       {
         key: "event",
         label:
           editingSeriesGroupId
-            ? "Modifier série"
+            ? "Série"
             : editingEventId
-              ? "Modifier occurrence"
-              : "Nouvel élément",
+              ? "Modifier"
+              : "Nouveau",
+        icon: "✏️",
       },
-      { key: "models", label: "Modèles" },
-      { key: "structure", label: "Chaînage" },
-      { key: "stats", label: "Statistiques" },
+      { key: "models", label: "Modèles", icon: "🧩" },
+      { key: "structure", label: "Chaînage", icon: "🪢" },
+      { key: "stats", label: "Stats", icon: "📊" },
     ];
+
+    if (isMobile) {
+      return (
+        <>
+          <div style={styles.menuBar}>
+            <button type="button" style={styles.buttonSecondary} onClick={exportData}>
+              Export JSON
+            </button>
+
+            <button
+              type="button"
+              style={styles.buttonSecondary}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import JSON
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              style={{ display: "none" }}
+              onChange={importData}
+            />
+          </div>
+
+          <div style={styles.mobileBottomBar}>
+            {items.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                style={{
+                  ...styles.mobileBottomButton,
+                  background:
+                    activeMenu === item.key
+                      ? "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.12) 100%)"
+                      : "transparent",
+                  color: activeMenu === item.key ? "#1d4ed8" : "#334155",
+                }}
+                onClick={() => setActiveMenu(item.key)}
+              >
+                <div style={{ fontSize: 16, marginBottom: 4 }}>{item.icon}</div>
+                <div>{item.label}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      );
+    }
 
     return (
       <div style={styles.menuBar}>
@@ -2202,6 +2524,7 @@ function App() {
     );
   }
 
+        
   function renderEventForm() {
     const domains = getDomains();
     const typeOptions = getTypes(eventForm.domain);
@@ -2971,6 +3294,27 @@ function App() {
             Vue agenda ergonomique avec filtres, timeline, menu contextuel et actions rapides.
           </p>
 
+          <div style={styles.quickStatsStrip}>
+            <div style={styles.quickStatCard}>
+              <div style={styles.subtle}>Éléments</div>
+              <div style={styles.quickStatValue}>{filteredAgendaEvents.length}</div>
+            </div>
+            <div style={styles.quickStatCard}>
+              <div style={styles.subtle}>Conflits</div>
+              <div style={styles.quickStatValue}>{filteredAgendaEvents.filter((e) => hasConflict(e)).length}</div>
+            </div>
+            <div style={styles.quickStatCard}>
+              <div style={styles.subtle}>Période</div>
+              <div style={{ ...styles.quickStatValue, fontSize: 15 }}>{viewMode}</div>
+            </div>
+            <div style={styles.quickStatCard}>
+              <div style={styles.subtle}>Aujourd’hui</div>
+              <div style={{ ...styles.quickStatValue, fontSize: 15 }}>
+                {new Date().toLocaleDateString("fr-FR")}
+              </div>
+            </div>
+          </div>
+
           <div style={styles.topNav}>
             <button type="button" style={styles.buttonSecondary} onClick={() => changeDate(-1)}>
               ◀ Précédent
@@ -3006,263 +3350,535 @@ function App() {
 
           {renderPeriodPicker()}
 
-          <p>
+          <p style={{ marginBottom: 0 }}>
             <strong>Période affichée :</strong> {getPeriodLabel()}
           </p>
         </div>
 
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Filtres</h2>
-
-          <div style={styles.filterRow}>
-            <div>
-              <label style={styles.label}>Recherche</label>
-              <input
-                style={styles.input}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="titre, lieu, domaine, personne..."
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Statut</label>
-              <select
-                style={styles.input}
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="tous">Tous</option>
-                <option value="prévu">Prévu</option>
-                <option value="confirmé">Confirmé</option>
-                <option value="terminé">Terminé</option>
-                <option value="annulé">Annulé</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.label}>Domaine</label>
-              <select
-                style={styles.input}
-                value={domainFilter}
-                onChange={(e) => {
-                  const nextDomain = e.target.value;
-                  setDomainFilter(nextDomain);
-                  setTypeFilter("tous");
-                  setSubTypeFilter("tous");
+        {isMobile ? (
+          <div style={styles.card}>
+            <div style={styles.mobileSegment}>
+              <button
+                type="button"
+                style={{
+                  ...styles.mobileSegmentButton,
+                  background: agendaMobileTab === "liste" ? "#0f172a" : "#fff",
+                  color: agendaMobileTab === "liste" ? "#fff" : "#0f172a",
+                  border: agendaMobileTab === "liste" ? "none" : "1px solid #cbd5e1",
                 }}
+                onClick={() => setAgendaMobileTab("liste")}
               >
-                <option value="tous">Tous</option>
-                {getDomains().map((domain) => (
-                  <option key={domain} value={domain}>
-                    {domain}
-                  </option>
-                ))}
-              </select>
-            </div>
+                Liste
+              </button>
 
-            <div>
-              <label style={styles.label}>Type</label>
-              <select
-                style={styles.input}
-                value={typeFilter}
-                onChange={(e) => {
-                  const nextType = e.target.value;
-                  setTypeFilter(nextType);
-                  setSubTypeFilter("tous");
+              <button
+                type="button"
+                style={{
+                  ...styles.mobileSegmentButton,
+                  background: agendaMobileTab === "timeline" ? "#0f172a" : "#fff",
+                  color: agendaMobileTab === "timeline" ? "#fff" : "#0f172a",
+                  border: agendaMobileTab === "timeline" ? "none" : "1px solid #cbd5e1",
                 }}
-                disabled={domainFilter === "tous"}
+                onClick={() => setAgendaMobileTab("timeline")}
               >
-                <option value="tous">Tous</option>
-                {currentTypeOptionsForFilter.map((typeLabel) => (
-                  <option key={typeLabel} value={typeLabel}>
-                    {typeLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
+                Timeline
+              </button>
 
-            <div>
-              <label style={styles.label}>Sous-type</label>
-              <select
-                style={styles.input}
-                value={subTypeFilter}
-                onChange={(e) => setSubTypeFilter(e.target.value)}
-                disabled={domainFilter === "tous" || typeFilter === "tous"}
+              <button
+                type="button"
+                style={{
+                  ...styles.mobileSegmentButton,
+                  background: agendaMobileTab === "filtres" ? "#0f172a" : "#fff",
+                  color: agendaMobileTab === "filtres" ? "#fff" : "#0f172a",
+                  border: agendaMobileTab === "filtres" ? "none" : "1px solid #cbd5e1",
+                }}
+                onClick={() => setAgendaMobileTab("filtres")}
               >
-                <option value="tous">Tous</option>
-                {currentSubTypeOptionsForFilter.map((subTypeLabel) => (
-                  <option key={subTypeLabel} value={subTypeLabel}>
-                    {subTypeLabel}
-                  </option>
-                ))}
-              </select>
+                Filtres
+              </button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "end" }}>
-              <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
-                <input
-                  type="checkbox"
-                  checked={showOnlyConflicts}
-                  onChange={(e) => setShowOnlyConflicts(e.target.checked)}
-                />
-                Seulement conflits
-              </label>
-            </div>
-          </div>
-        </div>
+            {agendaMobileTab === "filtres" ? (
+              <div>
+                <h2 style={styles.sectionTitle}>Filtres</h2>
 
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Timeline</h2>
-          <p style={styles.sectionText}>Visualisation directe des créneaux et chevauchements.</p>
-
-          <div style={styles.timelineLegend}>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#2563eb" }} />
-              Prévu
-            </div>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#22c55e" }} />
-              Confirmé
-            </div>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#60a5fa" }} />
-              Terminé
-            </div>
-            <div style={styles.timelineLegendItem}>
-              <span style={{ ...styles.legendDot, background: "#ef4444" }} />
-              Annulé / conflit
-            </div>
-          </div>
-
-          {renderTimeline()}
-        </div>
-
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Liste des éléments</h2>
-
-          {filteredAgendaEvents.length === 0 ? (
-            <p style={styles.subtle}>Aucun élément sur cette période.</p>
-          ) : (
-            filteredAgendaEvents.map((evt) => (
-              <div
-                key={evt.id}
-                style={styles.eventCard}
-                onContextMenu={(e) => openContextMenu(e, evt)}
-              >
-                <div style={styles.eventHeader}>
+                <div style={styles.filterRow}>
                   <div>
-                    <div style={styles.badge}>{evt.date}</div>
-                    <h3 style={styles.eventTitle}>{evt.title}</h3>
-
-                    <div style={{ marginBottom: 6 }}>
-                      <span style={{ ...styles.inlineBadge, background: "#eef2ff", color: "#4338ca" }}>
-                        {evt.domain}
-                      </span>
-                      <span style={{ ...styles.inlineBadge, background: "#f8fafc", color: "#334155" }}>
-                        {evt.typeLabel}
-                      </span>
-                      {evt.subTypeLabel ? (
-                        <span style={{ ...styles.inlineBadge, background: "#fff7ed", color: "#9a3412" }}>
-                          {evt.subTypeLabel}
-                        </span>
-                      ) : null}
-                      {evt.seriesGroupId ? (
-                        <span style={{ ...styles.inlineBadge, background: "#faf5ff", color: "#7c3aed" }}>
-                          Série
-                        </span>
-                      ) : null}
-                    </div>
+                    <label style={styles.label}>Recherche</label>
+                    <input
+                      style={styles.input}
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="titre, lieu, domaine, personne..."
+                    />
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <div
-                      style={{
-                        ...(statusColors[evt.status] || statusColors["prévu"]),
-                        padding: "6px 12px",
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 800,
+                  <div>
+                    <label style={styles.label}>Statut</label>
+                    <select
+                      style={styles.input}
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                      <option value="tous">Tous</option>
+                      <option value="prévu">Prévu</option>
+                      <option value="confirmé">Confirmé</option>
+                      <option value="terminé">Terminé</option>
+                      <option value="annulé">Annulé</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={styles.label}>Domaine</label>
+                    <select
+                      style={styles.input}
+                      value={domainFilter}
+                      onChange={(e) => {
+                        const nextDomain = e.target.value;
+                        setDomainFilter(nextDomain);
+                        setTypeFilter("tous");
+                        setSubTypeFilter("tous");
                       }}
                     >
-                      {evt.status}
-                    </div>
-                    <button type="button" style={styles.contextButton} onClick={(e) => openContextMenu(e, evt)}>
-                      Actions ▾
-                    </button>
+                      <option value="tous">Tous</option>
+                      {getDomains().map((domain) => (
+                        <option key={domain} value={domain}>
+                          {domain}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={styles.label}>Type</label>
+                    <select
+                      style={styles.input}
+                      value={typeFilter}
+                      onChange={(e) => {
+                        const nextType = e.target.value;
+                        setTypeFilter(nextType);
+                        setSubTypeFilter("tous");
+                      }}
+                      disabled={domainFilter === "tous"}
+                    >
+                      <option value="tous">Tous</option>
+                      {currentTypeOptionsForFilter.map((typeLabel) => (
+                        <option key={typeLabel} value={typeLabel}>
+                          {typeLabel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={styles.label}>Sous-type</label>
+                    <select
+                      style={styles.input}
+                      value={subTypeFilter}
+                      onChange={(e) => setSubTypeFilter(e.target.value)}
+                      disabled={domainFilter === "tous" || typeFilter === "tous"}
+                    >
+                      <option value="tous">Tous</option>
+                      {currentSubTypeOptionsForFilter.map((subTypeLabel) => (
+                        <option key={subTypeLabel} value={subTypeLabel}>
+                          {subTypeLabel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "end" }}>
+                    <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
+                      <input
+                        type="checkbox"
+                        checked={showOnlyConflicts}
+                        onChange={(e) => setShowOnlyConflicts(e.target.checked)}
+                      />
+                      Seulement conflits
+                    </label>
                   </div>
                 </div>
+              </div>
+            ) : null}
 
-                {hasConflict(evt) && <p style={styles.conflict}>Conflit de planning détecté</p>}
+            {agendaMobileTab === "timeline" ? (
+              <div>
+                <h2 style={styles.sectionTitle}>Timeline</h2>
+                <p style={styles.sectionText}>Affichage mobile compact et lisible.</p>
+                {renderTimeline()}
+              </div>
+            ) : null}
 
-                <div style={styles.metaGrid}>
-                  <div style={styles.metaBox}>
-                    <strong>Heure</strong>
-                    <div>{evt.startTime}</div>
-                  </div>
+            {agendaMobileTab === "liste" ? (
+              <div>
+                <h2 style={styles.sectionTitle}>Liste des éléments</h2>
 
-                  <div style={styles.metaBox}>
-                    <strong>Durée</strong>
-                    <div>{evt.duration} min</div>
-                  </div>
+                {filteredAgendaEvents.length === 0 ? (
+                  <p style={styles.subtle}>Aucun élément sur cette période.</p>
+                ) : (
+                  filteredAgendaEvents.map((evt) => (
+                    <div
+                      key={evt.id}
+                      style={styles.eventCard}
+                      onContextMenu={(e) => openContextMenu(e, evt)}
+                    >
+                      <div style={styles.eventHeader}>
+                        <div>
+                          <div style={styles.badge}>{evt.date}</div>
+                          <h3 style={styles.eventTitle}>{evt.title}</h3>
 
-                  <div style={styles.metaBox}>
-                    <strong>Temps mobilisé</strong>
-                    <div>{formatMinutes(getMobilizedMinutes(evt))}</div>
-                  </div>
+                          <div style={{ marginBottom: 6 }}>
+                            <span style={{ ...styles.inlineBadge, background: "#eef2ff", color: "#4338ca" }}>
+                              {evt.domain}
+                            </span>
+                            <span style={{ ...styles.inlineBadge, background: "#f8fafc", color: "#334155" }}>
+                              {evt.typeLabel}
+                            </span>
+                            {evt.subTypeLabel ? (
+                              <span style={{ ...styles.inlineBadge, background: "#fff7ed", color: "#9a3412" }}>
+                                {evt.subTypeLabel}
+                              </span>
+                            ) : null}
+                            {evt.seriesGroupId ? (
+                              <span style={{ ...styles.inlineBadge, background: "#faf5ff", color: "#7c3aed" }}>
+                                Série
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
 
-                  <div style={styles.metaBox}>
-                    <strong>Trajets</strong>
-                    <div>avant {evt.travelBefore} / après {evt.travelAfter} min</div>
-                  </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              ...(statusColors[evt.status] || statusColors["prévu"]),
+                              padding: "6px 12px",
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 800,
+                            }}
+                          >
+                            {evt.status}
+                          </div>
+                          <button type="button" style={styles.contextButton} onClick={(e) => openContextMenu(e, evt)}>
+                            Actions ▾
+                          </button>
+                        </div>
+                      </div>
 
-                  {evt.withWho ? (
-                    <div style={styles.metaBox}>
-                      <strong>Avec qui</strong>
-                      <div>{evt.withWho}</div>
+                      {hasConflict(evt) && <p style={styles.conflict}>Conflit de planning détecté</p>}
+
+                      <div style={styles.metaGrid}>
+                        <div style={styles.metaBox}>
+                          <strong>Heure</strong>
+                          <div>{evt.startTime}</div>
+                        </div>
+
+                        <div style={styles.metaBox}>
+                          <strong>Durée</strong>
+                          <div>{evt.duration} min</div>
+                        </div>
+
+                        <div style={styles.metaBox}>
+                          <strong>Mobilisé</strong>
+                          <div>{formatMinutes(getMobilizedMinutes(evt))}</div>
+                        </div>
+
+                        <div style={styles.metaBox}>
+                          <strong>Trajets</strong>
+                          <div>avant {evt.travelBefore} / après {evt.travelAfter}</div>
+                        </div>
+
+                        {evt.withWho ? (
+                          <div style={styles.metaBox}>
+                            <strong>Avec qui</strong>
+                            <div>{evt.withWho}</div>
+                          </div>
+                        ) : null}
+
+                        {evt.place ? (
+                          <div style={styles.metaBox}>
+                            <strong>Lieu</strong>
+                            <div>{evt.place}</div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {evt.notes ? (
+                        <div
+                          style={{
+                            background: "#ffffff",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: 14,
+                            padding: 12,
+                            marginBottom: 14,
+                          }}
+                        >
+                          <strong>Notes</strong>
+                          <div style={{ marginTop: 6 }}>{evt.notes}</div>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <div style={styles.card}>
+              <h2 style={styles.sectionTitle}>Filtres</h2>
 
-                  {evt.place ? (
-                    <div style={styles.metaBox}>
-                      <strong>Lieu</strong>
-                      <div>{evt.place}</div>
-                    </div>
-                  ) : null}
-
-                  {evt.channel ? (
-                    <div style={styles.metaBox}>
-                      <strong>Canal</strong>
-                      <div>{evt.channel}</div>
-                    </div>
-                  ) : null}
-
-                  {evt.objective ? (
-                    <div style={styles.metaBox}>
-                      <strong>Objectif</strong>
-                      <div>{evt.objective}</div>
-                    </div>
-                  ) : null}
+              <div style={styles.filterRow}>
+                <div>
+                  <label style={styles.label}>Recherche</label>
+                  <input
+                    style={styles.input}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="titre, lieu, domaine, personne..."
+                  />
                 </div>
 
-                {evt.notes ? (
-                  <div
-                    style={{
-                      background: "#ffffff",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 14,
-                      padding: 12,
-                      marginBottom: 14,
+                <div>
+                  <label style={styles.label}>Statut</label>
+                  <select
+                    style={styles.input}
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="tous">Tous</option>
+                    <option value="prévu">Prévu</option>
+                    <option value="confirmé">Confirmé</option>
+                    <option value="terminé">Terminé</option>
+                    <option value="annulé">Annulé</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Domaine</label>
+                  <select
+                    style={styles.input}
+                    value={domainFilter}
+                    onChange={(e) => {
+                      const nextDomain = e.target.value;
+                      setDomainFilter(nextDomain);
+                      setTypeFilter("tous");
+                      setSubTypeFilter("tous");
                     }}
                   >
-                    <strong>Notes</strong>
-                    <div style={{ marginTop: 6 }}>{evt.notes}</div>
-                  </div>
-                ) : null}
+                    <option value="tous">Tous</option>
+                    {getDomains().map((domain) => (
+                      <option key={domain} value={domain}>
+                        {domain}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Type</label>
+                  <select
+                    style={styles.input}
+                    value={typeFilter}
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      setTypeFilter(nextType);
+                      setSubTypeFilter("tous");
+                    }}
+                    disabled={domainFilter === "tous"}
+                  >
+                    <option value="tous">Tous</option>
+                    {currentTypeOptionsForFilter.map((typeLabel) => (
+                      <option key={typeLabel} value={typeLabel}>
+                        {typeLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.label}>Sous-type</label>
+                  <select
+                    style={styles.input}
+                    value={subTypeFilter}
+                    onChange={(e) => setSubTypeFilter(e.target.value)}
+                    disabled={domainFilter === "tous" || typeFilter === "tous"}
+                  >
+                    <option value="tous">Tous</option>
+                    {currentSubTypeOptionsForFilter.map((subTypeLabel) => (
+                      <option key={subTypeLabel} value={subTypeLabel}>
+                        {subTypeLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "end" }}>
+                  <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 700 }}>
+                    <input
+                      type="checkbox"
+                      checked={showOnlyConflicts}
+                      onChange={(e) => setShowOnlyConflicts(e.target.checked)}
+                    />
+                    Seulement conflits
+                  </label>
+                </div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+
+            <div style={styles.card}>
+              <h2 style={styles.sectionTitle}>Timeline</h2>
+              <p style={styles.sectionText}>Visualisation directe des créneaux et chevauchements.</p>
+
+              <div style={styles.timelineLegend}>
+                <div style={styles.timelineLegendItem}>
+                  <span style={{ ...styles.legendDot, background: "#2563eb" }} />
+                  Prévu
+                </div>
+                <div style={styles.timelineLegendItem}>
+                  <span style={{ ...styles.legendDot, background: "#22c55e" }} />
+                  Confirmé
+                </div>
+                <div style={styles.timelineLegendItem}>
+                  <span style={{ ...styles.legendDot, background: "#60a5fa" }} />
+                  Terminé
+                </div>
+                <div style={styles.timelineLegendItem}>
+                  <span style={{ ...styles.legendDot, background: "#ef4444" }} />
+                  Annulé / conflit
+                </div>
+              </div>
+
+              {renderTimeline()}
+            </div>
+
+            <div style={styles.card}>
+              <h2 style={styles.sectionTitle}>Liste des éléments</h2>
+
+              {filteredAgendaEvents.length === 0 ? (
+                <p style={styles.subtle}>Aucun élément sur cette période.</p>
+              ) : (
+                filteredAgendaEvents.map((evt) => (
+                  <div
+                    key={evt.id}
+                    style={styles.eventCard}
+                    onContextMenu={(e) => openContextMenu(e, evt)}
+                  >
+                    <div style={styles.eventHeader}>
+                      <div>
+                        <div style={styles.badge}>{evt.date}</div>
+                        <h3 style={styles.eventTitle}>{evt.title}</h3>
+
+                        <div style={{ marginBottom: 6 }}>
+                          <span style={{ ...styles.inlineBadge, background: "#eef2ff", color: "#4338ca" }}>
+                            {evt.domain}
+                          </span>
+                          <span style={{ ...styles.inlineBadge, background: "#f8fafc", color: "#334155" }}>
+                            {evt.typeLabel}
+                          </span>
+                          {evt.subTypeLabel ? (
+                            <span style={{ ...styles.inlineBadge, background: "#fff7ed", color: "#9a3412" }}>
+                              {evt.subTypeLabel}
+                            </span>
+                          ) : null}
+                          {evt.seriesGroupId ? (
+                            <span style={{ ...styles.inlineBadge, background: "#faf5ff", color: "#7c3aed" }}>
+                              Série
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div
+                          style={{
+                            ...(statusColors[evt.status] || statusColors["prévu"]),
+                            padding: "6px 12px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {evt.status}
+                        </div>
+                        <button type="button" style={styles.contextButton} onClick={(e) => openContextMenu(e, evt)}>
+                          Actions ▾
+                        </button>
+                      </div>
+                    </div>
+
+                    {hasConflict(evt) && <p style={styles.conflict}>Conflit de planning détecté</p>}
+
+                    <div style={styles.metaGrid}>
+                      <div style={styles.metaBox}>
+                        <strong>Heure</strong>
+                        <div>{evt.startTime}</div>
+                      </div>
+
+                      <div style={styles.metaBox}>
+                        <strong>Durée</strong>
+                        <div>{evt.duration} min</div>
+                      </div>
+
+                      <div style={styles.metaBox}>
+                        <strong>Temps mobilisé</strong>
+                        <div>{formatMinutes(getMobilizedMinutes(evt))}</div>
+                      </div>
+
+                      <div style={styles.metaBox}>
+                        <strong>Trajets</strong>
+                        <div>avant {evt.travelBefore} / après {evt.travelAfter} min</div>
+                      </div>
+
+                      {evt.withWho ? (
+                        <div style={styles.metaBox}>
+                          <strong>Avec qui</strong>
+                          <div>{evt.withWho}</div>
+                        </div>
+                      ) : null}
+
+                      {evt.place ? (
+                        <div style={styles.metaBox}>
+                          <strong>Lieu</strong>
+                          <div>{evt.place}</div>
+                        </div>
+                      ) : null}
+
+                      {evt.channel ? (
+                        <div style={styles.metaBox}>
+                          <strong>Canal</strong>
+                          <div>{evt.channel}</div>
+                        </div>
+                      ) : null}
+
+                      {evt.objective ? (
+                        <div style={styles.metaBox}>
+                          <strong>Objectif</strong>
+                          <div>{evt.objective}</div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {evt.notes ? (
+                      <div
+                        style={{
+                          background: "#ffffff",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 14,
+                          padding: 12,
+                          marginBottom: 14,
+                        }}
+                      >
+                        <strong>Notes</strong>
+                        <div style={{ marginTop: 6 }}>{evt.notes}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
       </>
     );
   }
@@ -3481,6 +4097,20 @@ function App() {
             Chaînage libre domaine → type → sous-type, modèles réutilisables, modification
             d’occurrence ou de série complète, menu contextuel, timeline et statistiques avancées.
           </p>
+        {isMobile ? (
+          <button
+            type="button"
+            style={styles.mobileFab}
+            onClick={() => {
+              resetEventForm();
+              setActiveMenu("event");
+            }}
+            aria-label="Ajouter un élément"
+            title="Ajouter un élément"
+          >
+            +
+          </button>
+        ) : null}
         </div>
 
         {renderMenu()}
